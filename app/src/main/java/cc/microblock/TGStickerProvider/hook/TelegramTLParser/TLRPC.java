@@ -1080,8 +1080,91 @@ public class TLRPC {
         public boolean voice;
         public byte[] waveform;
         public int preload_prefix_size;
+        public double video_start_ts;
         public boolean nosound;
+        public String video_codec;
+
         public static class TL_documentAttributeVideo extends DocumentAttribute {
+            public static final int constructor = 0x43c57c48;
+
+            public void readParams(AbstractSerializedData stream, boolean exception) {
+                flags = stream.readInt32(exception);
+                round_message = hasFlag(flags, FLAG_0);
+                supports_streaming = hasFlag(flags, FLAG_1);
+                nosound = hasFlag(flags, FLAG_3);
+                duration = stream.readDouble(exception);
+                w = stream.readInt32(exception);
+                h = stream.readInt32(exception);
+                if (hasFlag(flags, FLAG_2)) {
+                    preload_prefix_size = stream.readInt32(exception);
+                }
+                if (hasFlag(flags, FLAG_4)) {
+                    video_start_ts = stream.readDouble(exception);
+                }
+                if (hasFlag(flags, FLAG_5)) {
+                    video_codec = stream.readString(exception);
+                }
+            }
+
+            public void serializeToStream(AbstractSerializedData stream) {
+                stream.writeInt32(constructor);
+                flags = setFlag(flags, FLAG_0, round_message);
+                flags = setFlag(flags, FLAG_1, supports_streaming);
+                flags = setFlag(flags, FLAG_3, nosound);
+                stream.writeInt32(flags);
+                stream.writeDouble(duration);
+                stream.writeInt32(w);
+                stream.writeInt32(h);
+                if (hasFlag(flags, FLAG_2)) {
+                    stream.writeInt32(preload_prefix_size);
+                }
+                if (hasFlag(flags, FLAG_4)) {
+                    stream.writeDouble(video_start_ts);
+                }
+                if (hasFlag(flags, FLAG_5)) {
+                    stream.writeString(video_codec);
+                }
+            }
+        }
+
+        public static class TL_documentAttributeVideo_layer187 extends TL_documentAttributeVideo {
+            public static final int constructor = 0x17399fad;
+
+            public void readParams(AbstractSerializedData stream, boolean exception) {
+                flags = stream.readInt32(exception);
+                round_message = hasFlag(flags, FLAG_0);
+                supports_streaming = hasFlag(flags, FLAG_1);
+                nosound = hasFlag(flags, FLAG_3);
+                duration = stream.readDouble(exception);
+                w = stream.readInt32(exception);
+                h = stream.readInt32(exception);
+                if (hasFlag(flags, FLAG_2)) {
+                    preload_prefix_size = stream.readInt32(exception);
+                }
+                if (hasFlag(flags, FLAG_4)) {
+                    video_start_ts = stream.readDouble(exception);
+                }
+            }
+
+            public void serializeToStream(AbstractSerializedData stream) {
+                stream.writeInt32(constructor);
+                flags = setFlag(flags, FLAG_0, round_message);
+                flags = setFlag(flags, FLAG_1, supports_streaming);
+                flags = setFlag(flags, FLAG_3, nosound);
+                stream.writeInt32(flags);
+                stream.writeDouble(duration);
+                stream.writeInt32(w);
+                stream.writeInt32(h);
+                if (hasFlag(flags, FLAG_2)) {
+                    stream.writeInt32(preload_prefix_size);
+                }
+                if (hasFlag(flags, FLAG_4)) {
+                    stream.writeDouble(video_start_ts);
+                }
+            }
+        }
+
+        public static class TL_documentAttributeVideo_layer184 extends DocumentAttribute {
             public static final int constructor = 0xd38ff1c2;
 
             public void readParams(AbstractSerializedData stream, boolean exception) {
@@ -1175,8 +1258,14 @@ public class TLRPC {
                 case 0x15590068:
                     result = new TL_documentAttributeFilename();
                     break;
-                case 0xd38ff1c2:
+                case TL_documentAttributeVideo.constructor:
                     result = new TL_documentAttributeVideo();
+                    break;
+                case TL_documentAttributeVideo_layer187.constructor:
+                    result = new TL_documentAttributeVideo_layer187();
+                    break;
+                case TL_documentAttributeVideo_layer184.constructor:
+                    result = new TL_documentAttributeVideo_layer184();
                     break;
 //                case 0x5910cccb:
 //                    result = new TL_documentAttributeVideo_layer65();
@@ -1224,7 +1313,7 @@ public class TLRPC {
             date = stream.readInt32(exception);
             mime_type = stream.readString(exception);
             size = stream.readInt64(exception);
-            if ((flags & 1) != 0) {
+            if (hasFlag(flags, FLAG_0)) {
                 int magic = stream.readInt32(exception);
                 if (magic != 0x1cb5c415) {
                     if (exception) {
@@ -1241,7 +1330,7 @@ public class TLRPC {
                     thumbs.add(object);
                 }
             }
-            if ((flags & 2) != 0) {
+            if (hasFlag(flags, FLAG_1)) {
                 int magic = stream.readInt32(exception);
                 if (magic != 0x1cb5c415) {
                     if (exception) {
@@ -1259,21 +1348,7 @@ public class TLRPC {
                 }
             }
             dc_id = stream.readInt32(exception);
-            int magic = stream.readInt32(exception);
-            if (magic != 0x1cb5c415) {
-                if (exception) {
-                    throw new RuntimeException(String.format("wrong Vector magic, got %x", magic));
-                }
-                return;
-            }
-            int count = stream.readInt32(exception);
-            for (int a = 0; a < count; a++) {
-                DocumentAttribute object = DocumentAttribute.TLdeserialize(stream, stream.readInt32(exception), exception);
-                if (object == null) {
-                    return;
-                }
-                attributes.add(object);
-            }
+            attributes = vectorDeserialize(stream, DocumentAttribute::TLdeserialize, exception);
         }
 
         public void serializeToStream(AbstractSerializedData stream) {
@@ -1285,29 +1360,14 @@ public class TLRPC {
             stream.writeInt32(date);
             stream.writeString(mime_type);
             stream.writeInt64(size);
-            if ((flags & 1) != 0) {
-                stream.writeInt32(0x1cb5c415);
-                int count = thumbs.size();
-                stream.writeInt32(count);
-                for (int a = 0; a < count; a++) {
-                    thumbs.get(a).serializeToStream(stream);
-                }
+            if (hasFlag(flags, FLAG_0)) {
+                vectorSerialize(stream, thumbs);
             }
-//            if ((flags & 2) != 0) {
-//                stream.writeInt32(0x1cb5c415);
-//                int count = video_thumbs.size();
-//                stream.writeInt32(count);
-//                for (int a = 0; a < count; a++) {
-////                    video_thumbs.get(a).serializeToStream(stream);
-//                }
-//            }
+            if (hasFlag(flags, FLAG_1)) {
+//                vectorSerialize(stream, video_thumbs);
+            }
             stream.writeInt32(dc_id);
-            stream.writeInt32(0x1cb5c415);
-            int count = attributes.size();
-            stream.writeInt32(count);
-            for (int a = 0; a < count; a++) {
-                attributes.get(a).serializeToStream(stream);
-            }
+            vectorSerialize(stream, attributes);
         }
     }
 
