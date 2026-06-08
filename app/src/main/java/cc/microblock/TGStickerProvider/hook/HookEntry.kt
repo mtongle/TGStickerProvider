@@ -3,19 +3,9 @@ package cc.microblock.TGStickerProvider.hook
 import android.annotation.SuppressLint
 import android.database.CursorWindow
 import android.database.sqlite.SQLiteDatabase
-import android.database.sqlite.SQLiteOpenHelper
-import android.os.Build
-import android.util.Log.e
-import androidx.annotation.RequiresApi
-import cc.microblock.TGStickerProvider.BuildConfig
-import cc.microblock.TGStickerProvider.destDataPath
+import cc.microblock.TGStickerProvider.*
 import cc.microblock.TGStickerProvider.hook.TelegramTLParser.SerializedData
 import cc.microblock.TGStickerProvider.hook.TelegramTLParser.TLRPC
-import cc.microblock.TGStickerProvider.nomediaPath
-import cc.microblock.TGStickerProvider.nomediaPath2
-import cc.microblock.TGStickerProvider.stickerDataPath
-import cc.microblock.TGStickerProvider.syncFlagsPath
-import cc.microblock.TGStickerProvider.tgspDataPath
 import cc.microblock.TGStickerProvider.utils.CachePathHelper.getCachePath
 import com.highcapable.yukihookapi.annotation.xposed.InjectYukiHookWithXposed
 import com.highcapable.yukihookapi.hook.factory.configs
@@ -24,7 +14,6 @@ import com.highcapable.yukihookapi.hook.log.YLog
 import com.highcapable.yukihookapi.hook.xposed.proxy.IYukiHookXposedInit
 import java.io.File
 import java.io.FileNotFoundException
-import java.io.IOException
 import java.lang.reflect.Field
 import kotlin.concurrent.thread
 
