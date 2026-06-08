@@ -64,6 +64,6 @@ dependencies {
     testImplementation(junit.junit)
     androidTestImplementation(androidx.test.ext.junit)
     androidTestImplementation(androidx.test.espresso.espresso.core)
-    implementation("com.arthenica:ffmpeg-kit-min:6.0-2")
+    implementation("io.github.maitrungduc1410:ffmpeg-kit-min:6.0.1")
     implementation("com.github.bumptech.glide:glide:4.16.0")
 }

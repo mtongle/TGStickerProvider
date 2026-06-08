@@ -3,18 +3,9 @@ package cc.microblock.TGStickerProvider.hook
 import android.annotation.SuppressLint
 import android.database.CursorWindow
 import android.database.sqlite.SQLiteDatabase
-import android.database.sqlite.SQLiteOpenHelper
-import android.os.Build
-import androidx.annotation.RequiresApi
-import cc.microblock.TGStickerProvider.BuildConfig
-import cc.microblock.TGStickerProvider.destDataPath
+import cc.microblock.TGStickerProvider.*
 import cc.microblock.TGStickerProvider.hook.TelegramTLParser.SerializedData
 import cc.microblock.TGStickerProvider.hook.TelegramTLParser.TLRPC
-import cc.microblock.TGStickerProvider.nomediaPath
-import cc.microblock.TGStickerProvider.nomediaPath2
-import cc.microblock.TGStickerProvider.stickerDataPath
-import cc.microblock.TGStickerProvider.syncFlagsPath
-import cc.microblock.TGStickerProvider.tgspDataPath
 import cc.microblock.TGStickerProvider.utils.CachePathHelper.getCachePath
 import com.highcapable.yukihookapi.annotation.xposed.InjectYukiHookWithXposed
 import com.highcapable.yukihookapi.hook.factory.configs
@@ -22,6 +13,7 @@ import com.highcapable.yukihookapi.hook.factory.encase
 import com.highcapable.yukihookapi.hook.log.YLog
 import com.highcapable.yukihookapi.hook.xposed.proxy.IYukiHookXposedInit
 import java.io.File
+import java.io.FileNotFoundException
 import java.lang.reflect.Field
 import kotlin.concurrent.thread
 
@@ -85,26 +77,30 @@ class HookEntry : IYukiHookXposedInit {
                             val stickerSets = ArrayList<TLRPC.TL_messages_stickerSet>()
 
                             while (cursor.moveToNext()) {
+                                val type = cursor.getInt(0)
                                 val data = cursor.getBlob(1)
                                 val stream = SerializedData(data)
 
                                 try {
-                                    var constructorId = stream.readInt32(true)
-                                    var count = 1
+                                    var count = stream.readInt32(true)
+                                    var constructorId = -1
 
-                                    // Compatibility with newer DB sheets(stickersets2, stickerset)
-                                    if (constructorId != 0x6e153f16) {
-                                        count = constructorId
-                                        constructorId = stream.readInt32(true)
-                                    }
-                                    if (constructorId != 0x6e153f16) {
-                                        YLog.error("constructorId != 0x6e153f16")
-                                        continue
+                                    if (TLRPC.TL_messages_stickerSet.isStickerSetConstructor(count)) {
+                                        // old DB sheet
+                                        constructorId = count
+                                        count = stream.readInt32(true)
                                     }
 
                                     for (i in 0 until count) {
                                         try {
-                                            if (i != 0) stream.readInt32(true)
+                                            if (i != 0 || constructorId == -1)
+                                                constructorId = stream.readInt32(true)
+
+                                            if (!TLRPC.TL_messages_stickerSet.isStickerSetConstructor(constructorId)) {
+                                                YLog.error("Break on $dbPath::$sheetName type $type index $i; $constructorId is not a sticker set")
+                                                break
+                                            }
+
                                             val stickerSet =
                                                 TLRPC.TL_messages_stickerSet.TLdeserialize(
                                                     stream,
@@ -116,8 +112,7 @@ class HookEntry : IYukiHookXposedInit {
                                             dedupSet.add(hash)
                                             stickerSets.add(stickerSet)
                                         } catch (e: Exception) {
-                                            YLog.warn("", e)
-                                            continue
+                                            YLog.error("Failed to deserialize $dbPath::$sheetName type $type index $i", e)
                                         }
                                     }
 
@@ -149,8 +144,10 @@ class HookEntry : IYukiHookXposedInit {
                                                 stickerSet.documents[0]?.mime_type
                                     )
                                 } catch (e: Exception) {
-                                    YLog.error(e.toString())
-                                    // has occupied by another app
+                                    if (e is FileNotFoundException && e.message?.contains("open failed:") == true)
+                                        continue // has occupied by another app
+
+                                    YLog.error("Failed to handle ${stickerNameFile.absolutePath}", e)
                                     continue
                                 }
 
