@@ -149,8 +149,10 @@ class HookEntry : IYukiHookXposedInit {
                                                 stickerSet.documents[0]?.mime_type
                                     )
                                 } catch (e: Exception) {
-                                    YLog.error(e.toString())
-                                    // has occupied by another app
+                                    if (e is FileNotFoundException && e.message?.contains("open failed:") == true)
+                                        continue // has occupied by another app
+
+                                    YLog.error("Failed to handle ${stickerNameFile.absolutePath}", e)
                                     continue
                                 }
 
