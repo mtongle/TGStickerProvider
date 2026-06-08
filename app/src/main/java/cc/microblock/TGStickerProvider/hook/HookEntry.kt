@@ -106,6 +106,12 @@ class HookEntry : IYukiHookXposedInit {
                                         try {
                                             if (i != 0 || constructorId == -1)
                                                 constructorId = stream.readInt32(true)
+
+                                            if (!TLRPC.TL_messages_stickerSet.isStickerSetConstructor(constructorId)) {
+                                                YLog.error("Break on $dbPath::$sheetName type $type index $i; $constructorId is not a sticker set")
+                                                break
+                                            }
+
                                             val stickerSet =
                                                 TLRPC.TL_messages_stickerSet.TLdeserialize(
                                                     stream,
