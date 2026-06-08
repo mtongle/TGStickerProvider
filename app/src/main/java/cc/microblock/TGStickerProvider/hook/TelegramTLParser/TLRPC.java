@@ -250,6 +250,27 @@ public class TLRPC {
         public static StickerSet TLdeserialize(AbstractSerializedData stream, int constructor, boolean exception) {
             StickerSet result = null;
             switch (constructor) {
+                case 0xa7a43b17:
+                    result = new TL_stickerSet_old();
+                    break;
+                case 0x5585a139:
+                    result = new TL_stickerSet_layer96();
+                    break;
+                case 0x6a90bcb7:
+                    result = new TL_stickerSet_layer97();
+                    break;
+                case 0xeeb46f27:
+                    result = new TL_stickerSet_layer121();
+                    break;
+                case 0x40e237a8:
+                    result = new TL_stickerSet_layer126();
+                    break;
+                case 0xcd303b41:
+                    result = new TL_stickerSet_layer75();
+                    break;
+                case 0xd7df217a:
+                    result = new TL_stickerSet_layer143();
+                    break;
                 case 0x2dd14edc:
                     result = new TL_stickerSet();
                     break;
@@ -347,6 +368,333 @@ public class TLRPC {
             if ((flags & 256) != 0) {
                 stream.writeInt64(thumb_document_id);
             }
+            stream.writeInt32(count);
+            stream.writeInt32(hash);
+        }
+    }
+
+    public static class TL_stickerSet_old extends TL_stickerSet {
+        public static final int constructor = 0xa7a43b17;
+
+        public void readParams(AbstractSerializedData stream, boolean exception) {
+            id = stream.readInt64(exception);
+            access_hash = stream.readInt64(exception);
+            title = stream.readString(exception);
+            short_name = stream.readString(exception);
+        }
+
+        public void serializeToStream(AbstractSerializedData stream) {
+            stream.writeInt32(constructor);
+            stream.writeInt64(id);
+            stream.writeInt64(access_hash);
+            stream.writeString(title);
+            stream.writeString(short_name);
+        }
+    }
+
+    public static class TL_stickerSet_layer143 extends TL_stickerSet {
+        public static final int constructor = 0xd7df217a;
+
+        public void readParams(AbstractSerializedData stream, boolean exception) {
+            flags = stream.readInt32(exception);
+            archived = hasFlag(flags, FLAG_1);
+            official = hasFlag(flags, FLAG_2);
+            masks = hasFlag(flags, FLAG_3);
+            emojis = hasFlag(flags, FLAG_7);
+            if (hasFlag(flags, FLAG_0)) {
+                installed_date = stream.readInt32(exception);
+            }
+            id = stream.readInt64(exception);
+            access_hash = stream.readInt64(exception);
+            title = stream.readString(exception);
+            short_name = stream.readString(exception);
+            if (hasFlag(flags, FLAG_4)) {
+                int magic = stream.readInt32(exception);
+                if (magic != 0x1cb5c415) {
+                    if (exception) {
+                        throw new RuntimeException(String.format("wrong Vector magic, got %x", magic));
+                    }
+                    return;
+                }
+                int count = stream.readInt32(exception);
+                for (int a = 0; a < count; a++) {
+                    PhotoSize object = PhotoSize.TLdeserialize(0, 0, id, stream, stream.readInt32(exception), exception);
+                    if (object == null) {
+                        return;
+                    }
+                    thumbs.add(object);
+                }
+            }
+            if (hasFlag(flags, FLAG_4)) {
+                thumb_dc_id = stream.readInt32(exception);
+            }
+            if (hasFlag(flags, FLAG_4)) {
+                thumb_version = stream.readInt32(exception);
+            }
+            if (hasFlag(flags, FLAG_8)) {
+                thumb_document_id = stream.readInt64(exception);
+            }
+            count = stream.readInt32(exception);
+            hash = stream.readInt32(exception);
+        }
+
+        public void serializeToStream(AbstractSerializedData stream) {
+            stream.writeInt32(constructor);
+            flags = setFlag(flags, FLAG_1, archived);
+            flags = setFlag(flags, FLAG_2, official);
+            flags = setFlag(flags, FLAG_3, masks);
+            flags = setFlag(flags, FLAG_7, emojis);
+            stream.writeInt32(flags);
+            if (hasFlag(flags, FLAG_0)) {
+                stream.writeInt32(installed_date);
+            }
+            stream.writeInt64(id);
+            stream.writeInt64(access_hash);
+            stream.writeString(title);
+            stream.writeString(short_name);
+            if (hasFlag(flags, FLAG_4)) {
+                vectorSerialize(stream, thumbs);
+            }
+            if (hasFlag(flags, FLAG_4)) {
+                stream.writeInt32(thumb_dc_id);
+            }
+            if (hasFlag(flags, FLAG_4)) {
+                stream.writeInt32(thumb_version);
+            }
+            if (hasFlag(flags, FLAG_8)) {
+                stream.writeInt64(thumb_document_id);
+            }
+            stream.writeInt32(count);
+            stream.writeInt32(hash);
+        }
+    }
+
+    public static class TL_stickerSet_layer96 extends TL_stickerSet {
+        public static final int constructor = 0x5585a139;
+
+        public void readParams(AbstractSerializedData stream, boolean exception) {
+            flags = stream.readInt32(exception);
+            archived = hasFlag(flags, FLAG_1);
+            official = hasFlag(flags, FLAG_2);
+            masks = hasFlag(flags, FLAG_3);
+            if (hasFlag(flags, FLAG_0)) {
+                installed_date = stream.readInt32(exception);
+            }
+            id = stream.readInt64(exception);
+            access_hash = stream.readInt64(exception);
+            title = stream.readString(exception);
+            short_name = stream.readString(exception);
+            count = stream.readInt32(exception);
+            hash = stream.readInt32(exception);
+        }
+
+        public void serializeToStream(AbstractSerializedData stream) {
+            stream.writeInt32(constructor);
+            flags = setFlag(flags, FLAG_1, archived);
+            flags = setFlag(flags, FLAG_2, official);
+            flags = setFlag(flags, FLAG_3, masks);
+            stream.writeInt32(flags);
+            if (hasFlag(flags, FLAG_0)) {
+                stream.writeInt32(installed_date);
+            }
+            stream.writeInt64(id);
+            stream.writeInt64(access_hash);
+            stream.writeString(title);
+            stream.writeString(short_name);
+            stream.writeInt32(count);
+            stream.writeInt32(hash);
+        }
+    }
+
+    public static class TL_stickerSet_layer97 extends TL_stickerSet {
+        public static final int constructor = 0x6a90bcb7;
+
+        public void readParams(AbstractSerializedData stream, boolean exception) {
+            flags = stream.readInt32(exception);
+            archived = hasFlag(flags, FLAG_1);
+            official = hasFlag(flags, FLAG_2);
+            masks = hasFlag(flags, FLAG_3);
+            if (hasFlag(flags, FLAG_0)) {
+                installed_date = stream.readInt32(exception);
+            }
+            id = stream.readInt64(exception);
+            access_hash = stream.readInt64(exception);
+            title = stream.readString(exception);
+            short_name = stream.readString(exception);
+            if (hasFlag(flags, FLAG_4)) {
+                PhotoSize thumb = PhotoSize.TLdeserialize(0, 0, 0, stream, stream.readInt32(exception), exception);
+                if (thumb != null) {
+                    thumbs.add(thumb);
+                }
+            }
+            count = stream.readInt32(exception);
+            hash = stream.readInt32(exception);
+        }
+
+        public void serializeToStream(AbstractSerializedData stream) {
+            stream.writeInt32(constructor);
+            flags = setFlag(flags, FLAG_1, archived);
+            flags = setFlag(flags, FLAG_2, official);
+            flags = setFlag(flags, FLAG_3, masks);
+            stream.writeInt32(flags);
+            if (hasFlag(flags, FLAG_0)) {
+                stream.writeInt32(installed_date);
+            }
+            stream.writeInt64(id);
+            stream.writeInt64(access_hash);
+            stream.writeString(title);
+            stream.writeString(short_name);
+            if (hasFlag(flags, FLAG_4)) {
+                thumbs.get(0).serializeToStream(stream);
+            }
+            stream.writeInt32(count);
+            stream.writeInt32(hash);
+        }
+    }
+
+    public static class TL_stickerSet_layer126 extends TL_stickerSet {
+        public static final int constructor = 0x40e237a8;
+
+        public void readParams(AbstractSerializedData stream, boolean exception) {
+            flags = stream.readInt32(exception);
+            archived = hasFlag(flags, FLAG_1);
+            official = hasFlag(flags, FLAG_2);
+            masks = hasFlag(flags, FLAG_3);
+            if (hasFlag(flags, FLAG_0)) {
+                installed_date = stream.readInt32(exception);
+            }
+            id = stream.readInt64(exception);
+            access_hash = stream.readInt64(exception);
+            title = stream.readString(exception);
+            short_name = stream.readString(exception);
+            if (hasFlag(flags, FLAG_4)) {
+                int magic = stream.readInt32(exception);
+                if (magic != 0x1cb5c415) {
+                    if (exception) {
+                        throw new RuntimeException(String.format("wrong Vector magic, got %x", magic));
+                    }
+                    return;
+                }
+                int count = stream.readInt32(exception);
+                for (int a = 0; a < count; a++) {
+                    PhotoSize object = PhotoSize.TLdeserialize(0, 0, 0, stream, stream.readInt32(exception), exception);
+                    if (object == null) {
+                        return;
+                    }
+                    thumbs.add(object);
+                }
+            }
+            if (hasFlag(flags, FLAG_4)) {
+                thumb_dc_id = stream.readInt32(exception);
+            }
+            count = stream.readInt32(exception);
+            hash = stream.readInt32(exception);
+        }
+
+        public void serializeToStream(AbstractSerializedData stream) {
+            stream.writeInt32(constructor);
+            flags = setFlag(flags, FLAG_1, archived);
+            flags = setFlag(flags, FLAG_2, official);
+            flags = setFlag(flags, FLAG_3, masks);
+            stream.writeInt32(flags);
+            if (hasFlag(flags, FLAG_0)) {
+                stream.writeInt32(installed_date);
+            }
+            stream.writeInt64(id);
+            stream.writeInt64(access_hash);
+            stream.writeString(title);
+            stream.writeString(short_name);
+            if (hasFlag(flags, FLAG_4)) {
+                vectorSerialize(stream, thumbs);
+            }
+            if (hasFlag(flags, FLAG_4)) {
+                stream.writeInt32(thumb_dc_id);
+            }
+            stream.writeInt32(count);
+            stream.writeInt32(hash);
+        }
+    }
+
+    public static class TL_stickerSet_layer121 extends TL_stickerSet {
+        public static final int constructor = 0xeeb46f27;
+
+        public void readParams(AbstractSerializedData stream, boolean exception) {
+            flags = stream.readInt32(exception);
+            archived = hasFlag(flags, FLAG_1);
+            official = hasFlag(flags, FLAG_2);
+            masks = hasFlag(flags, FLAG_3);
+            if (hasFlag(flags, FLAG_0)) {
+                installed_date = stream.readInt32(exception);
+            }
+            id = stream.readInt64(exception);
+            access_hash = stream.readInt64(exception);
+            title = stream.readString(exception);
+            short_name = stream.readString(exception);
+            if (hasFlag(flags, FLAG_4)) {
+                PhotoSize thumb = PhotoSize.TLdeserialize(0, 0, 0, stream, stream.readInt32(exception), exception);
+                if (thumb != null) {
+                    thumbs.add(thumb);
+                }
+            }
+            if (hasFlag(flags, FLAG_4)) {
+                thumb_dc_id = stream.readInt32(exception);
+            }
+            count = stream.readInt32(exception);
+            hash = stream.readInt32(exception);
+        }
+
+        public void serializeToStream(AbstractSerializedData stream) {
+            stream.writeInt32(constructor);
+            flags = setFlag(flags, FLAG_1, archived);
+            flags = setFlag(flags, FLAG_2, official);
+            flags = setFlag(flags, FLAG_3, masks);
+            stream.writeInt32(flags);
+            if (hasFlag(flags, FLAG_0)) {
+                stream.writeInt32(installed_date);
+            }
+            stream.writeInt64(id);
+            stream.writeInt64(access_hash);
+            stream.writeString(title);
+            stream.writeString(short_name);
+            if (hasFlag(flags, FLAG_4)) {
+                thumbs.get(0).serializeToStream(stream);
+            }
+            if (hasFlag(flags, FLAG_4)) {
+                stream.writeInt32(thumb_dc_id);
+            }
+            stream.writeInt32(count);
+            stream.writeInt32(hash);
+        }
+    }
+
+    public static class TL_stickerSet_layer75 extends TL_stickerSet {
+        public static final int constructor = 0xcd303b41;
+
+        public void readParams(AbstractSerializedData stream, boolean exception) {
+            flags = stream.readInt32(exception);
+            installed = hasFlag(flags, FLAG_0);
+            archived = hasFlag(flags, FLAG_1);
+            official = hasFlag(flags, FLAG_2);
+            masks = hasFlag(flags, FLAG_3);
+            id = stream.readInt64(exception);
+            access_hash = stream.readInt64(exception);
+            title = stream.readString(exception);
+            short_name = stream.readString(exception);
+            count = stream.readInt32(exception);
+            hash = stream.readInt32(exception);
+        }
+
+        public void serializeToStream(AbstractSerializedData stream) {
+            stream.writeInt32(constructor);
+            flags = setFlag(flags, FLAG_0, installed);
+            flags = setFlag(flags, FLAG_1, archived);
+            flags = setFlag(flags, FLAG_2, official);
+            flags = setFlag(flags, FLAG_3, masks);
+            stream.writeInt32(flags);
+            stream.writeInt64(id);
+            stream.writeInt64(access_hash);
+            stream.writeString(title);
+            stream.writeString(short_name);
             stream.writeInt32(count);
             stream.writeInt32(hash);
         }
@@ -1082,15 +1430,21 @@ public class TLRPC {
     public static abstract class messages_StickerSet extends TLObject {
 
         public StickerSet set;
-        public ArrayList<TL_stickerPack> packs = new ArrayList<>();
-        public ArrayList<TL_stickerKeyword> keywords = new ArrayList<>();
-        public ArrayList<Document> documents = new ArrayList<>();
+        public ArrayList<TL_stickerPack> packs;
+        public ArrayList<TL_stickerKeyword> keywords;
+        public ArrayList<Document> documents;
 
         public static TL_messages_stickerSet TLdeserialize(AbstractSerializedData stream, int constructor, boolean exception) {
             TL_messages_stickerSet result = null;
             switch (constructor) {
                 case 0x6e153f16:
                     result = new TL_messages_stickerSet();
+                    break;
+                case 0xb60a24a6:
+                    result = new TL_messages_stickerSet_layer146();
+                    break;
+                case 0xd3f924eb:
+                    result = new TL_messages_stickerSetNotModified();
                     break;
             }
             if (result == null && exception) {
@@ -1101,83 +1455,109 @@ public class TLRPC {
             }
             return result;
         }
-    }
 
+        public static boolean isStickerSetConstructor(int value) {
+            return value == TL_messages_stickerSet.constructor
+                    || value == TL_messages_stickerSet_layer146.constructor
+                    || value == TL_messages_stickerSetNotModified.constructor;
+        }
+
+    }
 
     public static class TL_messages_stickerSet extends messages_StickerSet {
         public static final int constructor = 0x6e153f16;
 
         public void readParams(AbstractSerializedData stream, boolean exception) {
             set = StickerSet.TLdeserialize(stream, stream.readInt32(exception), exception);
-            int magic = stream.readInt32(exception);
-            if (magic != 0x1cb5c415) {
-                if (exception) {
-                    throw new RuntimeException(String.format("wrong Vector magic, got %x", magic));
-                }
-                return;
-            }
-            int count = stream.readInt32(exception);
-            for (int a = 0; a < count; a++) {
-                TL_stickerPack object = TL_stickerPack.TLdeserialize(stream, stream.readInt32(exception), exception);
-                if (object == null) {
-                    return;
-                }
-                packs.add(object);
-            }
-            magic = stream.readInt32(exception);
-            if (magic != 0x1cb5c415) {
-                if (exception) {
-                    throw new RuntimeException(String.format("wrong Vector magic, got %x", magic));
-                }
-                return;
-            }
-            count = stream.readInt32(exception);
-            for (int a = 0; a < count; a++) {
-                TL_stickerKeyword object = TL_stickerKeyword.TLdeserialize(stream, stream.readInt32(exception), exception);
-                if (object == null) {
-                    return;
-                }
-                keywords.add(object);
-            }
-            magic = stream.readInt32(exception);
-            if (magic != 0x1cb5c415) {
-                if (exception) {
-                    throw new RuntimeException(String.format("wrong Vector magic, got %x", magic));
-                }
-                return;
-            }
-            count = stream.readInt32(exception);
-            for (int a = 0; a < count; a++) {
-                Document object = Document.TLdeserialize(stream, stream.readInt32(exception), exception);
-                if (object == null) {
-                    return;
-                }
-                documents.add(object);
-            }
+            packs = vectorDeserialize(stream, TL_stickerPack::TLdeserialize, exception);
+            keywords = vectorDeserialize(stream, TL_stickerKeyword::TLdeserialize, exception);
+            documents = vectorDeserialize(stream, Document::TLdeserialize, exception);
         }
 
         public void serializeToStream(AbstractSerializedData stream) {
             stream.writeInt32(constructor);
             set.serializeToStream(stream);
-            stream.writeInt32(0x1cb5c415);
-            int count = packs.size();
-            stream.writeInt32(count);
-            for (int a = 0; a < count; a++) {
-                packs.get(a).serializeToStream(stream);
-            }
-            stream.writeInt32(0x1cb5c415);
-            count = keywords.size();
-            stream.writeInt32(count);
-            for (int a = 0; a < count; a++) {
-                keywords.get(a).serializeToStream(stream);
-            }
-            stream.writeInt32(0x1cb5c415);
-            count = documents.size();
-            stream.writeInt32(count);
-            for (int a = 0; a < count; a++) {
-                documents.get(a).serializeToStream(stream);
-            }
+            vectorSerialize(stream, packs);
+            vectorSerialize(stream, keywords);
+            vectorSerialize(stream, documents);
         }
+    }
+
+    public static class TL_messages_stickerSet_layer146 extends TL_messages_stickerSet {
+        public static final int constructor = 0xb60a24a6;
+
+        @Override
+        public void readParams(AbstractSerializedData stream, boolean exception) {
+            set = StickerSet.TLdeserialize(stream, stream.readInt32(exception), exception);
+            packs = vectorDeserialize(stream, TL_stickerPack::TLdeserialize, exception);
+            documents = vectorDeserialize(stream, Document::TLdeserialize, exception);
+        }
+
+        @Override
+        public void serializeToStream(AbstractSerializedData stream) {
+            stream.writeInt32(constructor);
+            set.serializeToStream(stream);
+            vectorSerialize(stream, packs);
+            vectorSerialize(stream, documents);
+        }
+
+    }
+
+    public static class TL_messages_stickerSetNotModified extends TL_messages_stickerSet {
+        public static final int constructor = 0xd3f924eb;
+
+        public void readParams(AbstractSerializedData stream, boolean exception) {
+
+        }
+
+        public void serializeToStream(AbstractSerializedData stream) {
+            stream.writeInt32(constructor);
+        }
+    }
+
+    public static int setFlag(int flags, int flag, boolean value) {
+        if (value) {
+            flags |= flag;
+        } else {
+            flags &= ~flag;
+        }
+        return flags;
+    }
+
+    public static boolean hasFlag(int flags, int flag) {
+        return (flags & flag) != 0;
+    }
+
+    static <T extends TLObject> ArrayList<T> vectorDeserialize(AbstractSerializedData stream, TLDeserializer<T> read, boolean exception) {
+        final int magic = stream.readInt32(exception);
+        if (magic != 0x1cb5c415) {
+            if (exception) {
+                throw new RuntimeException(String.format("wrong Vector magic, got %x", magic));
+            }
+            return new ArrayList<>();
+        }
+        final int count = stream.readInt32(exception);
+        // TODO: Validate VectorWrongSize
+        final ArrayList<T> result = new ArrayList<>(count);
+        for (int i = 0; i < count; ++i) {
+            T deserialize = read.deserialize(stream, stream.readInt32(exception), exception);
+            if (deserialize != null)
+                result.add(deserialize);
+        }
+        return result;
+    }
+
+    static <T extends TLObject> void vectorSerialize(AbstractSerializedData stream, final ArrayList<T> objects) {
+        stream.writeInt32(0x1cb5c415);
+        stream.writeInt32(objects.size());
+        for (T object : objects) {
+            object.serializeToStream(stream);
+        }
+    }
+
+    @FunctionalInterface
+    public interface TLDeserializer<T extends TLObject> {
+        T deserialize(AbstractSerializedData stream, int constructor, boolean exception);
     }
 
 }

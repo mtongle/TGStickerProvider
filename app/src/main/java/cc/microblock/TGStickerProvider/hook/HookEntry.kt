@@ -5,6 +5,7 @@ import android.database.CursorWindow
 import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
 import android.os.Build
+import android.util.Log.e
 import androidx.annotation.RequiresApi
 import cc.microblock.TGStickerProvider.BuildConfig
 import cc.microblock.TGStickerProvider.destDataPath
@@ -22,6 +23,8 @@ import com.highcapable.yukihookapi.hook.factory.encase
 import com.highcapable.yukihookapi.hook.log.YLog
 import com.highcapable.yukihookapi.hook.xposed.proxy.IYukiHookXposedInit
 import java.io.File
+import java.io.FileNotFoundException
+import java.io.IOException
 import java.lang.reflect.Field
 import kotlin.concurrent.thread
 
@@ -85,26 +88,24 @@ class HookEntry : IYukiHookXposedInit {
                             val stickerSets = ArrayList<TLRPC.TL_messages_stickerSet>()
 
                             while (cursor.moveToNext()) {
+                                val type = cursor.getInt(0)
                                 val data = cursor.getBlob(1)
                                 val stream = SerializedData(data)
 
                                 try {
-                                    var constructorId = stream.readInt32(true)
-                                    var count = 1
+                                    var count = stream.readInt32(true)
+                                    var constructorId = -1
 
-                                    // Compatibility with newer DB sheets(stickersets2, stickerset)
-                                    if (constructorId != 0x6e153f16) {
-                                        count = constructorId
-                                        constructorId = stream.readInt32(true)
-                                    }
-                                    if (constructorId != 0x6e153f16) {
-                                        YLog.error("constructorId != 0x6e153f16")
-                                        continue
+                                    if (TLRPC.TL_messages_stickerSet.isStickerSetConstructor(count)) {
+                                        // old DB sheet
+                                        constructorId = count
+                                        count = stream.readInt32(true)
                                     }
 
                                     for (i in 0 until count) {
                                         try {
-                                            if (i != 0) stream.readInt32(true)
+                                            if (i != 0 || constructorId == -1)
+                                                constructorId = stream.readInt32(true)
                                             val stickerSet =
                                                 TLRPC.TL_messages_stickerSet.TLdeserialize(
                                                     stream,
@@ -116,8 +117,7 @@ class HookEntry : IYukiHookXposedInit {
                                             dedupSet.add(hash)
                                             stickerSets.add(stickerSet)
                                         } catch (e: Exception) {
-                                            YLog.warn("", e)
-                                            continue
+                                            YLog.error("Failed to deserialize $dbPath::$sheetName type $type index $i", e)
                                         }
                                     }
 
