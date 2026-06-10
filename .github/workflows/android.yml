@@ -3,24 +3,74 @@ name: Android CI
 on:
   push:
     branches: [ "master" ]
+    tags:
+      - "v*"
   pull_request:
     branches: [ "master" ]
+  release:
+    types: [published]
+  workflow_dispatch:
 
 jobs:
-  build:
-
+  build-apk:
     runs-on: ubuntu-latest
 
-    steps:
-    - uses: actions/checkout@v3
-    - name: set up JDK 11
-      uses: actions/setup-java@v3
-      with:
-        java-version: '11'
-        distribution: 'temurin'
-        cache: gradle
+    permissions:
+      contents: write
 
-    - name: Grant execute permission for gradlew
-      run: chmod +x gradlew
-    - name: Build with Gradle
-      run: ./gradlew build
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: "17"
+          distribution: temurin
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      - name: Build release APK
+        run: ./gradlew assembleRelease
+
+      - name: Prepare APK
+        id: apk
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF_NAME}"
+          if [[ "${GITHUB_EVENT_NAME}" == "release" ]]; then
+            tag="${{ github.event.release.tag_name }}"
+          fi
+          apk_tag="${tag//\//-}"
+
+          apk_path="$(find app/build/outputs/apk/release -name '*.apk' -print -quit)"
+          if [[ -z "${apk_path}" ]]; then
+            echo "No release APK found" >&2
+            exit 1
+          fi
+
+          mkdir -p release-artifacts
+          apk_name="TGStickerProvider-${apk_tag}.apk"
+          cp "${apk_path}" "release-artifacts/${apk_name}"
+
+          echo "tag=${tag}" >> "${GITHUB_OUTPUT}"
+          echo "apk=release-artifacts/${apk_name}" >> "${GITHUB_OUTPUT}"
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: TGStickerProvider-apk
+          path: ${{ steps.apk.outputs.apk }}
+
+      - name: Upload APK to GitHub Release
+        if: github.event_name == 'release'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG_NAME: ${{ steps.apk.outputs.tag }}
+          APK_PATH: ${{ steps.apk.outputs.apk }}
+        run: gh release upload "${TAG_NAME}" "${APK_PATH}" --clobber
