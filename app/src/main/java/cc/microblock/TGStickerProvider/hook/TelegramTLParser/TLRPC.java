@@ -176,6 +176,92 @@ public class TLRPC {
             stream.writeInt32(size);
         }
     }
+    public static class TL_photoSizeEmpty extends PhotoSize {
+        public static final int constructor = 0xe17e23c;
+
+        public void readParams(AbstractSerializedData stream, boolean exception) {
+            type = stream.readString(exception);
+        }
+
+        public void serializeToStream(AbstractSerializedData stream) {
+            stream.writeInt32(constructor);
+            stream.writeString(type);
+        }
+    }
+
+    public static class TL_photoSizeProgressive extends PhotoSize {
+        public static final int constructor = 0xfa3efb95;
+
+        public ArrayList<Integer> sizes = new ArrayList<>();
+
+        public void readParams(AbstractSerializedData stream, boolean exception) {
+            type = stream.readString(exception);
+            w = stream.readInt32(exception);
+            h = stream.readInt32(exception);
+            int magic = stream.readInt32(exception);
+            if (magic != 0x1cb5c415) {
+                if (exception) {
+                    throw new RuntimeException(String.format("wrong Vector magic, got %x", magic));
+                }
+                return;
+            }
+            int count = stream.readInt32(exception);
+            for (int a = 0; a < count; a++) {
+                sizes.add(stream.readInt32(exception));
+            }
+            if (!sizes.isEmpty()) {
+                size = sizes.get(sizes.size() - 1);
+            }
+        }
+
+        public void serializeToStream(AbstractSerializedData stream) {
+            stream.writeInt32(constructor);
+            stream.writeString(type);
+            stream.writeInt32(w);
+            stream.writeInt32(h);
+            stream.writeInt32(0x1cb5c415);
+            stream.writeInt32(sizes.size());
+            for (Integer s : sizes) {
+                stream.writeInt32(s);
+            }
+        }
+    }
+
+    public static class TL_photoStrippedSize extends PhotoSize {
+        public static final int constructor = 0xe0b0bc2e;
+
+        public void readParams(AbstractSerializedData stream, boolean exception) {
+            type = stream.readString(exception);
+            bytes = stream.readByteArray(exception);
+            w = h = 50;
+        }
+
+        public void serializeToStream(AbstractSerializedData stream) {
+            stream.writeInt32(constructor);
+            stream.writeString(type);
+            stream.writeByteArray(bytes);
+        }
+    }
+
+    public static class TL_photoCachedSize extends PhotoSize {
+        public static final int constructor = 0x21e1ad6;
+
+        public void readParams(AbstractSerializedData stream, boolean exception) {
+            type = stream.readString(exception);
+            w = stream.readInt32(exception);
+            h = stream.readInt32(exception);
+            bytes = stream.readByteArray(exception);
+        }
+
+        public void serializeToStream(AbstractSerializedData stream) {
+            stream.writeInt32(constructor);
+            stream.writeString(type);
+            stream.writeInt32(w);
+            stream.writeInt32(h);
+            stream.writeByteArray(bytes);
+        }
+    }
+
     public static abstract class PhotoSize extends TLObject {
         public String type;
         public FileLocation location;
@@ -194,6 +280,18 @@ public class TLRPC {
                     break;
                 case 0x75c78e60:
                     result = new TL_photoSize();
+                    break;
+                case 0xe17e23c:
+                    result = new TL_photoSizeEmpty();
+                    break;
+                case 0xfa3efb95:
+                    result = new TL_photoSizeProgressive();
+                    break;
+                case 0xe0b0bc2e:
+                    result = new TL_photoStrippedSize();
+                    break;
+                case 0x21e1ad6:
+                    result = new TL_photoCachedSize();
                     break;
             }
             if (result == null && exception) {
@@ -1063,6 +1161,63 @@ public class TLRPC {
         }
     }
 
+    public static class TL_documentAttributeHasStickers extends DocumentAttribute {
+        public static final int constructor = 0x9801d2f7;
+
+        public void readParams(AbstractSerializedData stream, boolean exception) {
+        }
+
+        public void serializeToStream(AbstractSerializedData stream) {
+            stream.writeInt32(constructor);
+        }
+    }
+    public static class TL_documentAttributeAnimated extends DocumentAttribute {
+        public static final int constructor = 0x11b58939;
+
+        public void readParams(AbstractSerializedData stream, boolean exception) {
+        }
+
+        public void serializeToStream(AbstractSerializedData stream) {
+            stream.writeInt32(constructor);
+        }
+    }
+    public static class TL_documentAttributeSticker_old2 extends DocumentAttribute {
+        public static final int constructor = 0x994c9882;
+
+        public void readParams(AbstractSerializedData stream, boolean exception) {
+            alt = stream.readString(exception);
+        }
+
+        public void serializeToStream(AbstractSerializedData stream) {
+            stream.writeInt32(constructor);
+            stream.writeString(alt);
+        }
+    }
+    public static class TL_documentAttributeSticker_old extends DocumentAttribute {
+        public static final int constructor = 0xfb0a5727;
+
+        public void readParams(AbstractSerializedData stream, boolean exception) {
+        }
+
+        public void serializeToStream(AbstractSerializedData stream) {
+            stream.writeInt32(constructor);
+        }
+    }
+    public static class TL_documentAttributeSticker_layer55 extends DocumentAttribute {
+        public static final int constructor = 0x3a556302;
+
+        public void readParams(AbstractSerializedData stream, boolean exception) {
+            alt = stream.readString(exception);
+            stickerset = InputStickerSet.TLdeserialize(stream, stream.readInt32(exception), exception);
+        }
+
+        public void serializeToStream(AbstractSerializedData stream) {
+            stream.writeInt32(constructor);
+            stream.writeString(alt);
+            stickerset.serializeToStream(stream);
+        }
+    }
+
     public static abstract class DocumentAttribute extends TLObject {
         public String alt;
         public InputStickerSet stickerset;
@@ -1240,9 +1395,9 @@ public class TLRPC {
         public static DocumentAttribute TLdeserialize(AbstractSerializedData stream, int constructor, boolean exception) {
             DocumentAttribute result = null;
             switch (constructor) {
-//                case 0x3a556302:
-//                    result = new TL_documentAttributeSticker_layer55();
-//                    break;
+                case 0x3a556302:
+                    result = new TL_documentAttributeSticker_layer55();
+                    break;
                 case 0xef02ce6:
                     result = new TL_documentAttributeVideo_layer159();
                     break;
@@ -1252,9 +1407,9 @@ public class TLRPC {
                 case 0x6319d612:
                     result = new TL_documentAttributeSticker();
                     break;
-//                case 0x11b58939:
-//                    result = new TL_documentAttributeAnimated();
-//                    break;
+                case 0x11b58939:
+                    result = new TL_documentAttributeAnimated();
+                    break;
                 case 0x15590068:
                     result = new TL_documentAttributeFilename();
                     break;
@@ -1273,15 +1428,15 @@ public class TLRPC {
 //                case 0xded218e0:
 //                    result = new TL_documentAttributeAudio_layer45();
 //                    break;
-//                case 0xfb0a5727:
-//                    result = new TL_documentAttributeSticker_old();
-//                    break;
-//                case 0x9801d2f7:
-//                    result = new TL_documentAttributeHasStickers();
-//                    break;
-//                case 0x994c9882:
-//                    result = new TL_documentAttributeSticker_old2();
-//                    break;
+                case 0xfb0a5727:
+                    result = new TL_documentAttributeSticker_old();
+                    break;
+                case 0x9801d2f7:
+                    result = new TL_documentAttributeHasStickers();
+                    break;
+                case 0x994c9882:
+                    result = new TL_documentAttributeSticker_old2();
+                    break;
                 case 0x6c37c15c:
                     result = new TL_documentAttributeImageSize();
                     break;
@@ -1340,11 +1495,11 @@ public class TLRPC {
                 }
                 int count = stream.readInt32(exception);
                 for (int a = 0; a < count; a++) {
-//                    VideoSize object = VideoSize.TLdeserialize(0, id, stream, stream.readInt32(exception), exception);
-//                    if (object == null) {
-//                        return;
-//                    }
-//                    video_thumbs.add(object);
+                    VideoSize object = VideoSize.TLdeserialize(stream, stream.readInt32(exception), exception);
+                    if (object == null) {
+                        return;
+                    }
+                    video_thumbs.add(object);
                 }
             }
             dc_id = stream.readInt32(exception);
@@ -1364,7 +1519,7 @@ public class TLRPC {
                 vectorSerialize(stream, thumbs);
             }
             if (hasFlag(flags, FLAG_1)) {
-//                vectorSerialize(stream, video_thumbs);
+                vectorSerialize(stream, video_thumbs);
             }
             stream.writeInt32(dc_id);
             vectorSerialize(stream, attributes);
@@ -1422,6 +1577,116 @@ public class TLRPC {
         }
     }
 
+    public static abstract class VideoSize extends TLObject {
+
+        public int flags;
+        public String type;
+        public FileLocation location;
+        public int w;
+        public int h;
+        public int size;
+        public double video_start_ts;
+
+        public static VideoSize TLdeserialize(AbstractSerializedData stream, int constructor, boolean exception) {
+            VideoSize result = null;
+            switch (constructor) {
+                case 0xde33b094:
+                    result = new TL_videoSize();
+                    break;
+                case 0x435bb987:
+                    result = new TL_videoSize_layer115();
+                    break;
+                case 0xe831c556:
+                    result = new TL_videoSize_layer127();
+                    break;
+            }
+            if (result == null && exception) {
+                throw new RuntimeException(String.format("can't parse magic %x in VideoSize", constructor));
+            }
+            if (result != null) {
+                result.readParams(stream, exception);
+            }
+            return result;
+        }
+    }
+
+    public static class TL_videoSize extends VideoSize {
+        public static final int constructor = 0xde33b094;
+
+        public void readParams(AbstractSerializedData stream, boolean exception) {
+            flags = stream.readInt32(exception);
+            type = stream.readString(exception);
+            w = stream.readInt32(exception);
+            h = stream.readInt32(exception);
+            size = stream.readInt32(exception);
+            if ((flags & 1) != 0) {
+                video_start_ts = stream.readDouble(exception);
+            }
+        }
+
+        public void serializeToStream(AbstractSerializedData stream) {
+            stream.writeInt32(constructor);
+            stream.writeInt32(flags);
+            stream.writeString(type);
+            stream.writeInt32(w);
+            stream.writeInt32(h);
+            stream.writeInt32(size);
+            if ((flags & 1) != 0) {
+                stream.writeDouble(video_start_ts);
+            }
+        }
+    }
+
+    public static class TL_videoSize_layer115 extends VideoSize {
+        public static final int constructor = 0x435bb987;
+
+        public void readParams(AbstractSerializedData stream, boolean exception) {
+            type = stream.readString(exception);
+            location = FileLocation.TLdeserialize(stream, stream.readInt32(exception), exception);
+            w = stream.readInt32(exception);
+            h = stream.readInt32(exception);
+            size = stream.readInt32(exception);
+        }
+
+        public void serializeToStream(AbstractSerializedData stream) {
+            stream.writeInt32(constructor);
+            stream.writeString(type);
+            location.serializeToStream(stream);
+            stream.writeInt32(w);
+            stream.writeInt32(h);
+            stream.writeInt32(size);
+        }
+    }
+
+    public static class TL_videoSize_layer127 extends VideoSize {
+        public static final int constructor = 0xe831c556;
+
+        public void readParams(AbstractSerializedData stream, boolean exception) {
+            flags = stream.readInt32(exception);
+            type = stream.readString(exception);
+            location = FileLocation.TLdeserialize(stream, stream.readInt32(exception), exception);
+            w = stream.readInt32(exception);
+            h = stream.readInt32(exception);
+            size = stream.readInt32(exception);
+            if ((flags & 1) != 0) {
+                video_start_ts = stream.readDouble(exception);
+            }
+        }
+
+        public void serializeToStream(AbstractSerializedData stream) {
+            stream.writeInt32(constructor);
+            stream.writeInt32(flags);
+            stream.writeString(type);
+            location.serializeToStream(stream);
+            stream.writeInt32(w);
+            stream.writeInt32(h);
+            stream.writeInt32(size);
+            if ((flags & 1) != 0) {
+                stream.writeDouble(video_start_ts);
+            }
+        }
+    }
+
     public static abstract class Document extends TLObject {
         public int flags;
         public long id;
@@ -1433,7 +1698,7 @@ public class TLRPC {
         public String mime_type;
         public long size;
         public ArrayList<PhotoSize> thumbs = new ArrayList<>();
-//        public ArrayList<VideoSize> video_thumbs = new ArrayList<>();
+        public ArrayList<VideoSize> video_thumbs = new ArrayList<>();
         public int version;
         public int dc_id;
         public byte[] key;

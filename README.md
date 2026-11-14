@@ -15,6 +15,7 @@ You can download the latest release [here](https://t.me/microblock_pub/159).
 ✅ Telegram (Official)  
 ✅ Telegram (Play)  
 ✅ AyuGram 
+✅ NagramXF (fork.risin42.nagramx, layers up to 13.2.1)
 
 ❎ Telegram X (and all its forks)
 

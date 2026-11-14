@@ -12,7 +12,9 @@ object CachePathHelper {
         var defaultCachePath = "/storage/self/primary/Android/data/${packageName}/cache"
         if (context != null && isNekoX(packageName)) {
             val nekoXCachePath = getNekoXCachePath(context)
-            if (nekoXCachePath != null) {
+            // NekoX-family forks (Nagram/ForkClient/NagramXF...) keep "cache_path" in nkmrcfg with an
+            // empty default, so only trust it when the user actually set a custom directory.
+            if (!nekoXCachePath.isNullOrEmpty()) {
                 defaultCachePath = "$nekoXCachePath/caches"
             }
         }

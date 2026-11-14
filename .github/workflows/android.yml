@@ -37,6 +37,16 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
+      - name: Verify TL parser against a modern-fork sticker blob
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="$(mktemp -d)"
+          javac -d "$out" \
+            $(find app/src/main/java/cc/microblock/TGStickerProvider/hook/TelegramTLParser -name '*.java') \
+            tools/StickerBlobCompatTest.java
+          java -cp "$out" StickerBlobCompatTest
+
       - name: Build debug APK (signed)
         run: ./gradlew assembleDebug
 
