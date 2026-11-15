@@ -28,6 +28,8 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import cc.microblock.TGStickerProvider.*
 import cc.microblock.TGStickerProvider.databinding.ActivityMainBinding
+import cc.microblock.TGStickerProvider.importer.StickerImporter
+import cc.microblock.TGStickerProvider.utils.RootShell
 import cc.microblock.TGStickerProvider.ui.activity.base.BaseActivity
 import com.arthenica.ffmpegkit.FFmpegKit
 import com.bumptech.glide.Glide
@@ -228,23 +230,45 @@ class MainActivity : BaseActivity<ActivityMainBinding>() {
     }
 
     /**
-     * Asks the hook inside the client to run one sync pass, then waits (bounded) for it to finish.
-     * The hook no longer scans on its own: verifying the TL parser classes during the client's own
-     * startup deadlocks its class loader and the client gets killed with "failed to complete startup".
+     * Pulls the client's sticker sets in through root and materialises them into the export folders.
+     * The Xposed hook that used to do this is gone: on this device any injected module makes the
+     * client fail to finish its startup, so the work happens in our own process with `su`.
      */
-    private fun requestHookSync(timeoutMs: Long = 12_000L) {
-        try {
-            File(tgspDataPath).mkdirs()
-            val done = File(syncDonePath)
-            val started = System.currentTimeMillis()
-            File(syncRequestPath).writeText(started.toString())
-            while (System.currentTimeMillis() - started < timeoutMs) {
-                if (done.exists() && done.lastModified() >= started) return
-                Thread.sleep(300)
+    private fun importFromClient() {
+        val client = detectedClientPackage()
+        if (client == null) {
+            runOnUiThread {
+                Toast.makeText(this, "没有找到已安装的 Telegram 客户端", Toast.LENGTH_LONG).show()
             }
-            L.warn("hook did not answer within ${timeoutMs}ms; is the client running with the module enabled?")
+            return
+        }
+        val outcome = try {
+            StickerImporter(this).import(client) { stage ->
+                L.info("import: $stage")
+            }
         } catch (t: Throwable) {
-            L.warn("cannot request a sync from the hook", t)
+            L.error("import failed", t)
+            runOnUiThread {
+                Toast.makeText(this, "读取失败：${t.message}", Toast.LENGTH_LONG).show()
+            }
+            return
+        }
+        L.info("import done: sets=${outcome.sets} files=${outcome.copiedFiles} errors=${outcome.errors.size}")
+        if (outcome.errors.isNotEmpty()) {
+            val first = outcome.errors.first()
+            runOnUiThread {
+                Toast.makeText(this, "部分失败：$first", Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+
+    /** first installed client from the list we know how to read */
+    private fun detectedClientPackage(): String? = CLIENT_PACKAGES.firstOrNull { pkg ->
+        try {
+            packageManager.getPackageInfo(pkg, 0)
+            true
+        } catch (t: Throwable) {
+            false
         }
     }
 
@@ -256,7 +280,7 @@ class MainActivity : BaseActivity<ActivityMainBinding>() {
         ).show()
 
         thread(true) {
-            requestHookSync()
+            importFromClient()
             updateStickerList()
         }
     }
@@ -491,7 +515,7 @@ class MainActivity : BaseActivity<ActivityMainBinding>() {
                 setCancelable(false)
             }
             thread(true) {
-                requestHookSync()
+                importFromClient()
                 updateStickerList()
                 pd.dismiss()
                 runOnUiThread {
@@ -638,12 +662,8 @@ class MainActivity : BaseActivity<ActivityMainBinding>() {
         this.stickerList.postValue(stickerList)
     }
 
-    /** the hook inside the client writes this marker every time it finishes a sync pass */
-    private fun isHookAlive(): Boolean = try {
-        File(syncDonePath).exists()
-    } catch (t: Throwable) {
-        false
-    }
+    /** everything now needs root, so "active" simply means su is granted */
+    private fun isHookAlive(): Boolean = RootShell.isAvailable()
 
     /**
      * Refresh module status

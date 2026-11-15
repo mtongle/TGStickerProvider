@@ -8,6 +8,12 @@ A Xposed/LSPosed plugin to dump stickers from Telegram. Almost all 3rd-party tel
 ### Release
 You can download the latest release [here](https://t.me/microblock_pub/159).
 
+### How it reads the client
+
+The app asks root (`su`) for the client's `files/cache4.db` (and every `account*/cache4.db`), parses the
+`stickers_v2` blobs itself, then copies only the sticker files those sets reference out of the client's
+cache. No Xposed/LSPosed module is involved any more.
+
 ### Compatibility
 
 ✅ NullGram  

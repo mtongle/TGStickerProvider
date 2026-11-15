@@ -16,9 +16,6 @@
         android:theme="@style/Theme.AppDefault"
         tools:targetApi="31">
 
-        <!-- No xposed meta-data: this is a modern (libxposed API 102) module, described by
-             META-INF/xposed/{module.prop,scope.list,java_init.list}. -->
-
         <activity
             android:name=".ui.activity.MainActivity"
             android:exported="true"
@@ -26,7 +23,7 @@
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
 
-                <category android:name="de.robv.android.xposed.category.MODULE_SETTINGS" />
+                <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
 

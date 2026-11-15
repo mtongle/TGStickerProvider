@@ -9,11 +9,14 @@ const val syncFlagsPath = "$tgspDataPath/stickerSyncFlags/"
 const val nomediaPath = "$exposedPath/.nomedia"
 const val nomediaPath2 = "$realDataPath/.nomedia"
 
-/**
- * Handshake with the hook running inside the Telegram client. The hook does nothing at all until
- * this request file appears: parsing sticker blobs means verifying thousands of classes from the
- * module dex, and doing that while the client is still defining classes at startup deadlocks ART's
- * class linker (the client then gets killed with "failed to complete startup").
- */
-const val syncRequestPath = "$tgspDataPath/sync_request"
-const val syncDonePath = "$tgspDataPath/sync_done"
+/** clients we know how to read; the first installed one wins */
+val CLIENT_PACKAGES = listOf(
+    "fork.risin42.nagramx",
+    "nu.gpu.nagram",
+    "nu.gpu.nagramx",
+    "xyz.nextalone.nagram",
+    "xyz.nextalone.nnngram",
+    "top.qwq2333.nullgram",
+    "org.telegram.messenger",
+    "org.telegram.mdgram",
+)
