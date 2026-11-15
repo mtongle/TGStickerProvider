@@ -27,7 +27,7 @@ class StickerImporter(private val context: Context) {
         val lowQualityFiles: Int,
         val errors: List<String>,
         val error: String? = null,
-        val debug: String = ""
+        val diagnostics: String = ""
     )
 
     private data class WantedFile(val source: String, val dest: String)
@@ -55,15 +55,15 @@ class StickerImporter(private val context: Context) {
             return Outcome(
                 0, 0, 0, errors,
                 error = "su 没有真正执行命令：请确认 KernelSU 里已给本应用授权（若刚更新过 APK 需要重新授权）",
-                debug = pulled.output.take(300)
+                diagnostics = pulled.output.takeLast(1500)
             )
         }
         val dbs = pulled.byPackage.entries.firstOrNull { clientPackage == null || it.key == clientPackage }
         if (dbs == null || dbs.value.isEmpty()) {
             return Outcome(
                 0, 0, 0, errors,
-                error = "root 正常，但没找到客户端的 cache4.db（支持的客户端：${CLIENT_PACKAGES.joinToString("/")}）",
-                debug = pulled.output.take(300)
+                error = "root 正常，但没找到客户端的 cache4.db",
+                diagnostics = diagnose(pulled.output)
             )
         }
 
@@ -96,37 +96,84 @@ class StickerImporter(private val context: Context) {
      * which client exists, so no separate package detection is needed.
      */
     private fun pullDatabases(work: File): PullResult {
-        val script = StringBuilder()
-        script.appendLine("W=${RootShell.quote(work.absolutePath)}")
-        script.appendLine("mkdir -p \"\$W\"")
-        script.appendLine("echo TGSP_ROOT_OK")
-        script.appendLine("for p in ${CLIENT_PACKAGES.joinToString(" ")}; do")
-        script.appendLine("  d=\"/data/data/\$p/files\"")
-        script.appendLine("  if [ -f \"\$d/cache4.db\" ]; then")
-        script.appendLine("    mkdir -p \"\$W/\$p\"")
-        script.appendLine("    cp -f \"\$d/cache4.db\" \"\$W/\$p/main.db\" 2>/dev/null")
-        script.appendLine("    for a in \"\$d\"/account*; do")
-        script.appendLine("      [ -f \"\$a/cache4.db\" ] || continue")
-        script.appendLine("      cp -f \"\$a/cache4.db\" \"\$W/\$p/\$(basename \"\$a\").db\" 2>/dev/null")
-        script.appendLine("    done")
-        script.appendLine("  fi")
-        script.appendLine("done")
-        script.appendLine("echo TGSP_DONE")
+        // Literal-only scripts: every path is baked in from Kotlin, so there are no shell variables
+        // to escape wrongly and `su` on any root implementation can run them verbatim.
 
-        val scriptFile = File(context.cacheDir, "tgsp_pull_db.sh")
-        scriptFile.writeText(script.toString())
-        val result = RootShell.runScript(scriptFile, timeoutSeconds = 180)
-        val output = (result.stdout + result.stderr).trim()
-        val rootWorked = result.stdout.contains("TGSP_ROOT_OK")
+        // 1. ask where the databases are
+        val listScript = StringBuilder()
+        listScript.appendLine("echo TGSP_ROOT_OK")
+        CLIENT_PACKAGES.forEach { pkg ->
+            listScript.appendLine("echo '###$pkg'")
+            listScript.appendLine(
+                "find ${RootShell.quote("/data/data/$pkg")} -maxdepth 5 -type f -name 'cache4.db' 2>/dev/null"
+            )
+        }
+        listScript.appendLine("echo TGSP_DONE")
+        val listFile = File(context.cacheDir, "tgsp_list_db.sh")
+        listFile.writeText(listScript.toString())
+        val listed = RootShell.runScript(listFile, timeoutSeconds = 180)
+        val rootWorked = listed.stdout.contains("TGSP_ROOT_OK")
+
+        val found = LinkedHashMap<String, MutableList<String>>()
+        var current: String? = null
+        listed.stdout.lineSequence().forEach { raw ->
+            val line = raw.trim()
+            if (line.startsWith("###")) {
+                current = line.removePrefix("###")
+                found.getOrPut(current!!) { ArrayList() }
+            } else if (line.endsWith("cache4.db") && current != null) {
+                found[current!!]?.add(line)
+            }
+        }
+
+        // 2. copy what was found into our own cache dir
+        val copyScript = StringBuilder()
+        copyScript.appendLine("mkdir -p ${RootShell.quote(work.absolutePath)}")
+        var index = 0
+        found.forEach { (pkg, paths) ->
+            if (paths.isEmpty()) return@forEach
+            val pkgDir = File(work, pkg)
+            copyScript.appendLine("mkdir -p ${RootShell.quote(pkgDir.absolutePath)}")
+            paths.forEach { src ->
+                val name = "%02d".format(index++) + ".db"
+                copyScript.appendLine(
+                    "cp -f ${RootShell.quote(src)} ${RootShell.quote(File(pkgDir, name).absolutePath)}"
+                )
+            }
+        }
+        val copyFile = File(context.cacheDir, "tgsp_copy_db.sh")
+        copyFile.writeText(copyScript.toString())
+        val copied = RootShell.runScript(copyFile, timeoutSeconds = 240)
+        val output = (listed.stdout + listed.stderr + copied.stderr).trim()
 
         val byPackage = HashMap<String, List<File>>()
         CLIENT_PACKAGES.forEach { pkg ->
-            val dir = File(work, pkg)
-            val dbs = dir.listFiles { f -> f.name.endsWith(".db") && f.length() > 0 }?.toList()
+            val dbs = File(work, pkg).listFiles { f -> f.name.endsWith(".db") && f.length() > 0 }?.toList()
             if (!dbs.isNullOrEmpty()) byPackage[pkg] = dbs
         }
-        L.info("root=${rootWorked} clients=${byPackage.keys} out=${output.take(200)}")
+        L.info("root=$rootWorked clients=${byPackage.keys} out=${output.take(200)}")
         return PullResult(rootWorked, byPackage, output)
+    }
+
+    /** nothing found: show the user (and us) what the client's data dir actually looks like */
+    private fun diagnose(pullOutput: String): String {
+        val script = StringBuilder()
+        script.appendLine("echo DIAG-BEGIN")
+        CLIENT_PACKAGES.forEach { pkg ->
+            script.appendLine("echo '## $pkg'")
+            script.appendLine("ls -la ${RootShell.quote("/data/data/$pkg")} 2>&1 | head -25")
+            script.appendLine("ls -la ${RootShell.quote("/data/data/$pkg/files")} 2>&1 | head -40")
+            script.appendLine(
+                "find ${RootShell.quote("/data/data/$pkg")} -maxdepth 4 -name '*.db*' 2>/dev/null | head -40"
+            )
+        }
+        script.appendLine("echo DIAG-END")
+
+        val scriptFile = File(context.cacheDir, "tgsp_diag.sh")
+        scriptFile.writeText(script.toString())
+        val result = RootShell.runScript(scriptFile, timeoutSeconds = 120)
+        val diag = (result.stdout + result.stderr).trim()
+        return ("pull:\n" + pullOutput.takeLast(600) + "\n" + diag).takeLast(6000)
     }
 
     private fun parseDb(dbFile: File, cachePath: String) {

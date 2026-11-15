@@ -253,7 +253,16 @@ class MainActivity : BaseActivity<ActivityMainBinding>() {
             else -> null
         }
         if (message != null) {
-            runOnUiThread { Toast.makeText(this, message, Toast.LENGTH_LONG).show() }
+            runOnUiThread {
+                Toast.makeText(this, message, Toast.LENGTH_LONG).show()
+                if (outcome.error != null && outcome.diagnostics.isNotBlank()) {
+                    AlertDialog.Builder(this)
+                        .setTitle("诊断信息")
+                        .setMessage(outcome.diagnostics)
+                        .setPositiveButton("好", null)
+                        .show()
+                }
+            }
         }
     }
 
