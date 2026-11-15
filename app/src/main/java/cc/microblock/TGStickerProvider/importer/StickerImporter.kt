@@ -7,6 +7,7 @@ import cc.microblock.TGStickerProvider.*
 import cc.microblock.TGStickerProvider.hook.TelegramTLParser.SerializedData
 import cc.microblock.TGStickerProvider.hook.TelegramTLParser.TLRPC
 import cc.microblock.TGStickerProvider.utils.L
+import cc.microblock.TGStickerProvider.utils.SuiRoot
 import java.io.File
 
 /**
@@ -34,10 +35,26 @@ class StickerImporter(private val context: Context) {
     private val errors = ArrayList<String>()
     private var setCount = 0
 
-    fun import(progress: (String) -> Unit = {}): Outcome {
+    fun import(clientPackage: String = CLIENT_PACKAGES.first(), progress: (String) -> Unit = {}): Outcome {
         wanted.clear()
         errors.clear()
         setCount = 0
+
+        // When Sui runs as a root service the snapshot can be refreshed without any manual step:
+        // the script executes in Sui's process, which sees /data/user/0/<client>.
+        var pullLog = ""
+        if (SuiRoot.hasPermission() && SuiRoot.uid() == 0) {
+            progress("通过 Sui 读取客户端（root）")
+            try {
+                val script = File(context.cacheDir, "tgsp_pull.sh")
+                script.writeText(PullScript.build(clientPackage))
+                val result = SuiRoot.runScript(script)
+                pullLog = result.output
+                L.info("sui pull exit=${result.code} out=${result.output.take(400)}")
+            } catch (t: Throwable) {
+                L.error("sui pull failed", t)
+            }
+        }
 
         val root = dumpRoot()
         val dbDir = File(root, "db")
@@ -47,7 +64,14 @@ class StickerImporter(private val context: Context) {
         if (dbs.isNullOrEmpty()) {
             return Outcome(
                 0, 0, errors,
-                error = "还没有数据：先在 MT/Termux 的 root shell 里跑 sh /sdcard/tgsp_pull.sh"
+                error = when {
+                    pullLog.isNotBlank() && !pullLog.contains("PULL_DONE") ->
+                        "Sui 执行失败：${pullLog.takeLast(200)}"
+                    SuiRoot.isRunning() && SuiRoot.uid() != 0 ->
+                        "Sui 跑在 adb 模式（uid=${SuiRoot.uid()}），读不到应用私有目录：请把 Sui 切成 root 模式，或手动跑 sh /sdcard/tgsp_pull.sh"
+                    else ->
+                        "还没有数据：Sui 未授权时，先在 MT/Termux 的 root shell 里跑 sh /sdcard/tgsp_pull.sh"
+                }
             )
         }
         if (!cacheDir.isDirectory) {

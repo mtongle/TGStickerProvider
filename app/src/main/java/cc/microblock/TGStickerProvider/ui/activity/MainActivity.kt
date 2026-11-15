@@ -6,6 +6,7 @@ import android.annotation.SuppressLint
 import android.app.AlertDialog
 import android.app.ProgressDialog
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.graphics.Color
 import android.graphics.ImageDecoder
 import android.graphics.drawable.ColorDrawable
@@ -29,6 +30,8 @@ import androidx.recyclerview.widget.RecyclerView
 import cc.microblock.TGStickerProvider.*
 import cc.microblock.TGStickerProvider.databinding.ActivityMainBinding
 import cc.microblock.TGStickerProvider.importer.StickerImporter
+import cc.microblock.TGStickerProvider.utils.SuiRoot
+import rikka.shizuku.Shizuku
 import cc.microblock.TGStickerProvider.ui.activity.base.BaseActivity
 import com.arthenica.ffmpegkit.FFmpegKit
 import com.bumptech.glide.Glide
@@ -234,6 +237,13 @@ class MainActivity : BaseActivity<ActivityMainBinding>() {
      * process cannot see other apps' data dirs even as uid 0), parsing does not.
      */
     private fun importFromClient() {
+        if (SuiRoot.isRunning() && !SuiRoot.hasPermission()) {
+            SuiRoot.requestPermission(SHIZUKU_REQUEST_CODE)
+            runOnUiThread {
+                Toast.makeText(this, "请在 Sui 里允许本应用（root 模式），然后再点一次刷新", Toast.LENGTH_LONG).show()
+            }
+            return
+        }
         val outcome = try {
             StickerImporter(this).import { stage -> L.info("import: $stage") }
         } catch (t: Throwable) {
@@ -389,6 +399,8 @@ class MainActivity : BaseActivity<ActivityMainBinding>() {
     var requiresSyncOnly = false
     var useHighQualityGif = false
 
+private const val SHIZUKU_REQUEST_CODE = 4210
+
     fun onFilterChanged(list: List<StickerInfo>? = stickerList.value) {
         if (list == null) return
         (binding.stickerManageView.adapter as RecyclerAdapterStickerList).stickerList = list.filter {
@@ -406,6 +418,7 @@ class MainActivity : BaseActivity<ActivityMainBinding>() {
     @SuppressLint("NotifyDataSetChanged")
     override fun onCreate() {
         refreshModuleStatus()
+        registerSuiListener()
         requestPermission()
         binding.mainTextVersion.text = getString(R.string.module_version, BuildConfig.VERSION_NAME)
         binding.button2.setOnClickListener {
@@ -644,6 +657,28 @@ class MainActivity : BaseActivity<ActivityMainBinding>() {
         stickerList.sortByDescending { it.remoteState.all }
 
         this.stickerList.postValue(stickerList)
+    }
+
+    private val shizukuPermissionListener =
+        Shizuku.OnRequestPermissionResultListener { requestCode, grantResult ->
+            if (requestCode == SHIZUKU_REQUEST_CODE && grantResult == PackageManager.PERMISSION_GRANTED) {
+                L.info("sui permission granted, retrying import")
+                thread(true) {
+                    importFromClient()
+                    updateStickerList()
+                }
+            }
+        }
+
+    private fun registerSuiListener() {
+        try {
+            if (SuiRoot.isRunning()) {
+                Shizuku.addRequestPermissionResultListener(shizukuPermissionListener)
+                L.info("sui uid=${SuiRoot.uid()}")
+            }
+        } catch (t: Throwable) {
+            L.warn("cannot register shizuku listener", t)
+        }
     }
 
     /** "active" means a data snapshot is present in /sdcard/TGSP */
