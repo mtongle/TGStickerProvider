@@ -40,3 +40,6 @@
 # Xposed entry point: referenced by name from assets/xposed_init, never from code
 -keep class cc.microblock.TGStickerProvider.hook.HookEntry { *; }
 -keep class cc.microblock.TGStickerProvider.hook.TelegramTLParser.** { *; }
+
+# modern Xposed API is compileOnly, provided by the framework at runtime
+-dontwarn io.github.libxposed.**

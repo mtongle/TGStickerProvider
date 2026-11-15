@@ -69,7 +69,8 @@ dependencies {
     implementation("com.google.android.material:material:1.11.0")
     implementation("androidx.appcompat:appcompat:1.6.1")
     implementation("androidx.recyclerview:recyclerview")
-    compileOnly(de.robv.android.xposed.api)
+    // modern Xposed API (libxposed 102); provided by the framework at runtime
+    compileOnly("io.github.libxposed:api:102.0.0")
     implementation(com.github.duanhong169.drawabletoolbox)
     implementation(androidx.core.core.ktx)
     implementation(androidx.appcompat.appcompat)

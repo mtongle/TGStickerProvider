@@ -1,53 +1,56 @@
 package cc.microblock.TGStickerProvider.hook
 
 import android.database.sqlite.SQLiteDatabase
+import android.util.Log
 import cc.microblock.TGStickerProvider.*
 import cc.microblock.TGStickerProvider.hook.TelegramTLParser.SerializedData
 import cc.microblock.TGStickerProvider.hook.TelegramTLParser.TLRPC
 import cc.microblock.TGStickerProvider.utils.CachePathHelper.getCachePath
 import cc.microblock.TGStickerProvider.utils.L
-import de.robv.android.xposed.IXposedHookLoadPackage
-import de.robv.android.xposed.XposedBridge
-import de.robv.android.xposed.callbacks.XC_LoadPackage
+import io.github.libxposed.api.XposedModule
+import io.github.libxposed.api.XposedModuleInterface.ModuleLoadedParam
+import io.github.libxposed.api.XposedModuleInterface.PackageLoadedParam
 import java.io.File
 import java.io.FileNotFoundException
 import kotlin.concurrent.thread
 
 
 /**
- * Entry point using the plain legacy Xposed API.
+ * Entry point of the modern libxposed API (102).
  *
- * This used to be YukiHookAPI, which hooks the application lifecycle, wraps the client's resources
- * and gets a large part of the module dex verified inside the client process while the client is
- * still installing its own content providers. On Android 17 that ends in ART's class linker being
- * stuck (two threads spinning in Class::SetStatus), the client is killed by AMS with "failed to
- * complete startup" and the user only sees the splash screen forever.
+ * Declared by META-INF/xposed/java_init.list, not by legacy Xposed meta-data: on Android 17 the old
+ * de.robv.android.xposed bridge is what hung the client ("failed to complete startup" - two threads
+ * stuck in ART's class linker right after injection), together with a 2023-era hook framework.
  *
- * So this class deliberately does nothing at injection time except log and spawn a thread that
- * stats a file. Nothing from the TL parser is loaded until the module UI writes <data>/sync_request.
+ * Nothing happens here beyond logging and starting a file poller. The TL parser is only touched once
+ * the module UI writes <data>/sync_request, so it is never loaded during the client's startup.
  */
-class HookEntry : IXposedHookLoadPackage {
+class HookEntry : XposedModule() {
 
-    override fun handleLoadPackage(lpparam: XC_LoadPackage.LoadPackageParam) {
+    private var processName: String? = null
+
+    override fun onModuleLoaded(param: ModuleLoadedParam) {
+        processName = param.processName
+        log(Log.INFO, TAG, "module loaded in ${param.processName}")
+    }
+
+    override fun onPackageLoaded(param: PackageLoadedParam) {
         try {
-            val pkg = lpparam.packageName ?: return
+            val pkg = param.packageName ?: return
             if (pkg.startsWith("android")) return
 
             // Telegram forks spawn :push / :webview / :account processes; only the main one works.
-            val process = try {
-                lpparam.processName
-            } catch (t: Throwable) {
-                null
-            }
+            val process = processName
             if (process != null && process != pkg) return
+            if (!param.isFirstPackage) return
 
-            XposedBridge.log("TGStickerProvider: injected into $pkg")
+            log(Log.INFO, TAG, "injected into $pkg")
 
             thread(start = true, isDaemon = true) {
                 pollForRequests(pkg)
             }
         } catch (t: Throwable) {
-            XposedBridge.log("TGStickerProvider: injection failed: $t")
+            log(Log.ERROR, TAG, "injection failed", t)
         }
     }
 
@@ -307,6 +310,8 @@ class HookEntry : IXposedHookLoadPackage {
     }
 
     companion object {
+        private const val TAG = "TGStickerProvider"
+
         /** how often the worker looks for a sync request while it is still idle */
         private const val REQUEST_POLL_MS = 1_500L
 
