@@ -257,7 +257,7 @@ class MainActivity : BaseActivity<ActivityMainBinding>() {
                 Toast.makeText(this, message, Toast.LENGTH_LONG).show()
                 if (outcome.error != null && outcome.diagnostics.isNotBlank()) {
                     AlertDialog.Builder(this)
-                        .setTitle("诊断信息")
+                        .setTitle("诊断信息 v" + BuildConfig.VERSION_NAME)
                         .setMessage(outcome.diagnostics)
                         .setPositiveButton("复制") { _, _ ->
                             val clipboard = getSystemService(CLIPBOARD_SERVICE) as android.content.ClipboardManager
