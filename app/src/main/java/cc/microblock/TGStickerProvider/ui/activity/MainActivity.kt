@@ -212,6 +212,11 @@ class RecyclerAdapterStickerList(private val act: MainActivity) :
 
 class MainActivity : BaseActivity<ActivityMainBinding>() {
 
+    private companion object {
+        const val SHIZUKU_REQUEST_CODE = 4210
+    }
+
+
     private fun requestPermission() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             // 先判断有没有权限
@@ -398,8 +403,6 @@ class MainActivity : BaseActivity<ActivityMainBinding>() {
     var filter = ""
     var requiresSyncOnly = false
     var useHighQualityGif = false
-
-private const val SHIZUKU_REQUEST_CODE = 4210
 
     fun onFilterChanged(list: List<StickerInfo>? = stickerList.value) {
         if (list == null) return
