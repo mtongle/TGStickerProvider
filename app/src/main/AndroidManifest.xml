@@ -16,6 +16,16 @@
         android:theme="@style/Theme.AppDefault"
         tools:targetApi="31">
 
+        <!-- Sui/Shizuku: the provider artifact only ships the permission + meta-data, the provider
+             itself has to be declared here or Shizuku.pingBinder() stays false forever -->
+        <provider
+            android:name="rikka.shizuku.ShizukuProvider"
+            android:authorities="${applicationId}.shizuku"
+            android:enabled="true"
+            android:exported="true"
+            android:multiprocess="false"
+            android:permission="android.permission.INTERACT_ACROSS_USERS_FULL" />
+
         <activity
             android:name=".ui.activity.MainActivity"
             android:exported="true"
