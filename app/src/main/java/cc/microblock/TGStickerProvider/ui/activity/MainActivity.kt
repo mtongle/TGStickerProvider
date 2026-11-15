@@ -300,9 +300,9 @@ class MainActivity : BaseActivity<ActivityMainBinding>() {
                             if (!File(outPath).exists()) {
 
                                 val input = remoteFile.absolutePath
-                                // canonical split -> palettegen -> paletteuse chain. The previous
-                                // "split[v],palettegen,[v]paletteuse" form is not a valid filter
-                                // graph and is rejected outright by ffmpeg 8.
+                                // explicit two-pass palette graph: split -> palettegen -> paletteuse.
+                                // The old "split[v],palettegen,[v]paletteuse" form depended on implicit
+                                // pad ordering and gave no control over stats/dither.
                                 val filter = if (act.useHighQualityGif)
                                     "[0:v]split[a][b];[a]palettegen=stats_mode=diff[p];[b][p]paletteuse=dither=sierra2_4a"
                                 else
