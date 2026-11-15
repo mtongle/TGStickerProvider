@@ -237,8 +237,12 @@ class MainActivity : BaseActivity<ActivityMainBinding>() {
     private fun importFromClient() {
         val client = detectedClientPackage()
         if (client == null) {
+            val message = if (!RootShell.isAvailable())
+                "需要 root 权限：请允许本应用的 su 请求后再试"
+            else
+                "没有找到已安装的 Telegram 客户端（支持 NagramXF / Nagram / NagramX / NullGram / 官方版）"
             runOnUiThread {
-                Toast.makeText(this, "没有找到已安装的 Telegram 客户端", Toast.LENGTH_LONG).show()
+                Toast.makeText(this, message, Toast.LENGTH_LONG).show()
             }
             return
         }
@@ -262,15 +266,8 @@ class MainActivity : BaseActivity<ActivityMainBinding>() {
         }
     }
 
-    /** first installed client from the list we know how to read */
-    private fun detectedClientPackage(): String? = CLIENT_PACKAGES.firstOrNull { pkg ->
-        try {
-            packageManager.getPackageInfo(pkg, 0)
-            true
-        } catch (t: Throwable) {
-            false
-        }
-    }
+    /** first installed client from the list we know how to read (detected through root) */
+    private fun detectedClientPackage(): String? = StickerImporter.detectClients().firstOrNull()
 
     private fun onGainedPermission() {
         Toast.makeText(

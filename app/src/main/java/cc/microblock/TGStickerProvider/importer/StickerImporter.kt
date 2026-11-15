@@ -242,6 +242,19 @@ class StickerImporter(private val context: Context) {
 
     companion object {
         private const val BLOB_CHUNK_SIZE = 256 * 1024
+
+        /**
+         * Installed clients we can read. PackageManager.getPackageInfo() is useless here: on
+         * Android 11+ other packages are invisible without QUERY_ALL_PACKAGES, which is why the
+         * look-up always failed. We have root, so just list /data/data.
+         */
+        fun detectClients(): List<String> {
+            if (!RootShell.isAvailable(true)) return emptyList()
+            val listing = RootShell.run("ls -1 /data/data 2>/dev/null")
+            if (!listing.ok) return emptyList()
+            val present = listing.stdout.split('\n').map { it.trim() }.toSet()
+            return CLIENT_PACKAGES.filter { it in present }
+        }
     }
 }
 
