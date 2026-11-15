@@ -29,7 +29,6 @@ import androidx.recyclerview.widget.RecyclerView
 import cc.microblock.TGStickerProvider.*
 import cc.microblock.TGStickerProvider.databinding.ActivityMainBinding
 import cc.microblock.TGStickerProvider.importer.StickerImporter
-import cc.microblock.TGStickerProvider.utils.RootShell
 import cc.microblock.TGStickerProvider.ui.activity.base.BaseActivity
 import com.arthenica.ffmpegkit.FFmpegKit
 import com.bumptech.glide.Glide
@@ -230,13 +229,13 @@ class MainActivity : BaseActivity<ActivityMainBinding>() {
     }
 
     /**
-     * Pulls the client's sticker sets in through root and materialises them into the export folders.
-     * The Xposed hook that used to do this is gone: on this device any injected module makes the
-     * client fail to finish its startup, so the work happens in our own process with `su`.
+     * Imports the snapshot produced by `sh /sdcard/tgsp_pull.sh` and materialises it into the export
+     * folders. No root, no Xposed: copying the client's databases needs a real root shell (an app
+     * process cannot see other apps' data dirs even as uid 0), parsing does not.
      */
     private fun importFromClient() {
         val outcome = try {
-            StickerImporter(this).import(null) { stage -> L.info("import: $stage") }
+            StickerImporter(this).import { stage -> L.info("import: $stage") }
         } catch (t: Throwable) {
             L.error("import failed", t)
             runOnUiThread {
@@ -248,28 +247,12 @@ class MainActivity : BaseActivity<ActivityMainBinding>() {
         L.info("import done: sets=${outcome.sets} files=${outcome.copiedFiles} errors=${outcome.errors.size}")
         val message = when {
             outcome.error != null -> outcome.error
-            outcome.sets == 0 -> "没有读到表情包（客户端里先看一眼表情，让它写入缓存）"
+            outcome.sets == 0 -> "读到 0 个表情包（客户端里先看一眼表情，再重跑 tgsp_pull.sh）"
             outcome.errors.isNotEmpty() -> "部分失败：${outcome.errors.first()}"
             else -> null
         }
         if (message != null) {
-            runOnUiThread {
-                Toast.makeText(this, message, Toast.LENGTH_LONG).show()
-                if (outcome.error != null && outcome.diagnostics.isNotBlank()) {
-                    AlertDialog.Builder(this)
-                        .setTitle("诊断信息 v" + BuildConfig.VERSION_NAME)
-                        .setMessage(outcome.diagnostics)
-                        .setPositiveButton("复制") { _, _ ->
-                            val clipboard = getSystemService(CLIPBOARD_SERVICE) as android.content.ClipboardManager
-                            clipboard.setPrimaryClip(
-                                android.content.ClipData.newPlainText("diagnostics", outcome.diagnostics)
-                            )
-                            Toast.makeText(this, "已复制", Toast.LENGTH_SHORT).show()
-                        }
-                        .setNegativeButton("关闭", null)
-                        .show()
-                }
-            }
+            runOnUiThread { Toast.makeText(this, message, Toast.LENGTH_LONG).show() }
         }
     }
 
@@ -663,8 +646,8 @@ class MainActivity : BaseActivity<ActivityMainBinding>() {
         this.stickerList.postValue(stickerList)
     }
 
-    /** everything now needs root, so "active" simply means su is granted */
-    private fun isHookAlive(): Boolean = RootShell.isAvailable()
+    /** "active" means a data snapshot is present in /sdcard/TGSP */
+    private fun isHookAlive(): Boolean = StickerImporter.hasDump()
 
     /**
      * Refresh module status
