@@ -49,12 +49,27 @@ class HookEntry : IYukiHookXposedInit {
         }
         if (processName != null && processName != pkg) return@encase
 
-        // Detached thread, started only after the client finished drawing its splash screen, and
-        // wrapped so that nothing in here can take the host app down with it.
+        // A detached thread that only stats a file until the module UI asks for a sync. Touching the
+        // TL parser classes this early is what deadlocks the client: the module dex is verified in
+        // the client's own class linker while the client is still defining its startup classes.
         thread(start = true, isDaemon = true) {
             try {
-                Thread.sleep(START_DELAY_MS)
-                runSyncLoop(pkg, ctx)
+                var lastRequest = 0L
+                while (true) {
+                    val request = File(syncRequestPath)
+                    val stamp = try {
+                        if (request.exists()) request.lastModified() else 0L
+                    } catch (t: Throwable) {
+                        0L
+                    }
+                    if (stamp > 0L && stamp != lastRequest) {
+                        lastRequest = stamp
+                        request.delete()
+                        runSyncLoop(pkg, ctx) // loops until the process dies
+                        return@thread
+                    }
+                    Thread.sleep(REQUEST_POLL_MS)
+                }
             } catch (e: InterruptedException) {
                 // module unloaded or process shutting down
             } catch (t: Throwable) {
@@ -94,6 +109,12 @@ class HookEntry : IYukiHookXposedInit {
                 YLog.debug(e.toString())
             } catch (t: Throwable) {
                 YLog.error("sync pass failed", t)
+            }
+
+            try {
+                File(syncDonePath).writeText(System.currentTimeMillis().toString())
+            } catch (t: Throwable) {
+                YLog.warn("cannot write sync marker", t)
             }
 
             Thread.sleep(40 * 1000)
@@ -279,8 +300,8 @@ class HookEntry : IYukiHookXposedInit {
     }
 
     companion object {
-        /** ms to wait after injection before touching the client's database and files. */
-        private const val START_DELAY_MS = 8_000L
+        /** how often the worker looks for a sync request while it is still idle */
+        private const val REQUEST_POLL_MS = 1_500L
 
         /** bytes pulled per substr() query while reading one stickers_v2 blob. */
         private const val BLOB_CHUNK_SIZE = 256 * 1024

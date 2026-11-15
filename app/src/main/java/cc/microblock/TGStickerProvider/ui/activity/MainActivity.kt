@@ -228,6 +228,27 @@ class MainActivity : BaseActivity<ActivityMainBinding>() {
         }
     }
 
+    /**
+     * Asks the hook inside the client to run one sync pass, then waits (bounded) for it to finish.
+     * The hook no longer scans on its own: verifying the TL parser classes during the client's own
+     * startup deadlocks its class loader and the client gets killed with "failed to complete startup".
+     */
+    private fun requestHookSync(timeoutMs: Long = 12_000L) {
+        try {
+            File(tgspDataPath).mkdirs()
+            val done = File(syncDonePath)
+            val started = System.currentTimeMillis()
+            File(syncRequestPath).writeText(started.toString())
+            while (System.currentTimeMillis() - started < timeoutMs) {
+                if (done.exists() && done.lastModified() >= started) return
+                Thread.sleep(300)
+            }
+            YLog.warn("hook did not answer within ${timeoutMs}ms; is the client running with the module enabled?")
+        } catch (t: Throwable) {
+            YLog.warn("cannot request a sync from the hook", t)
+        }
+    }
+
     private fun onGainedPermission() {
         Toast.makeText(
             this,
@@ -235,7 +256,10 @@ class MainActivity : BaseActivity<ActivityMainBinding>() {
             Toast.LENGTH_LONG
         ).show()
 
-        updateStickerList()
+        thread(true) {
+            requestHookSync()
+            updateStickerList()
+        }
     }
 
     public fun syncStickerPack(info: StickerInfo, finished: () -> Unit, error: (Int, String) -> Unit) {
@@ -468,6 +492,7 @@ class MainActivity : BaseActivity<ActivityMainBinding>() {
                 setCancelable(false)
             }
             thread(true) {
+                requestHookSync()
                 updateStickerList()
                 pd.dismiss()
                 runOnUiThread {
