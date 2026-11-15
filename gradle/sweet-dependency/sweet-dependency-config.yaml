@@ -34,11 +34,6 @@ libraries:
       version: 82
       repositories:
         rovo89-xposed-api
-  com.highcapable.yukihookapi:
-    api:
-      version: 1.2.0
-    ksp-xposed:
-      version-ref: <this>::api
   com.github.duanhong169:
     drawabletoolbox:
       version: 1.0.7

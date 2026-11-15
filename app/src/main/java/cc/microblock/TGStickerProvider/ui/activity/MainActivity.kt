@@ -33,8 +33,7 @@ import com.arthenica.ffmpegkit.FFmpegKit
 import com.bumptech.glide.Glide
 import com.google.android.material.imageview.ShapeableImageView
 import com.google.android.material.textview.MaterialTextView
-import com.highcapable.yukihookapi.YukiHookAPI
-import com.highcapable.yukihookapi.hook.log.YLog
+import cc.microblock.TGStickerProvider.utils.L
 import java.io.File
 import kotlin.concurrent.thread
 
@@ -108,7 +107,7 @@ class RecyclerAdapterStickerList(private val act: MainActivity) :
                     it.setVolume(0f, 0f)
                 }
                 holder.videoView.setOnErrorListener { mp, what, extra ->
-                    YLog.error("VideoView error: $what, $extra")
+                    L.error("VideoView error: $what, $extra")
                     true
                 }
 
@@ -243,9 +242,9 @@ class MainActivity : BaseActivity<ActivityMainBinding>() {
                 if (done.exists() && done.lastModified() >= started) return
                 Thread.sleep(300)
             }
-            YLog.warn("hook did not answer within ${timeoutMs}ms; is the client running with the module enabled?")
+            L.warn("hook did not answer within ${timeoutMs}ms; is the client running with the module enabled?")
         } catch (t: Throwable) {
-            YLog.warn("cannot request a sync from the hook", t)
+            L.warn("cannot request a sync from the hook", t)
         }
     }
 
@@ -313,7 +312,7 @@ class MainActivity : BaseActivity<ActivityMainBinding>() {
                                         file.delete()
                                 }
                             } catch (e: Exception) {
-                                YLog.error("Error while converting webp to png", e)
+                                L.error("Error while converting webp to png", e)
                                 failReasons += "$id: Error while converting webp to png: ${e.message}\n"
                                 failCount++
                             }
@@ -335,9 +334,9 @@ class MainActivity : BaseActivity<ActivityMainBinding>() {
                                     "-y -i '${input}' -filter_complex '${filter}' -loop 0 -f gif '${outPath}'"
                                 )
                                 if (session.returnCode.isValueSuccess) {
-                                    YLog.info("FFmpegKit: ${session.command} finished successfully")
+                                    L.info("FFmpegKit: ${session.command} finished successfully")
                                 } else {
-                                    YLog.error("FFmpegKit: ${session.command} failed with state ${session.state} and rc ${session.returnCode}")
+                                    L.error("FFmpegKit: ${session.command} failed with state ${session.state} and rc ${session.returnCode}")
                                     failReasons += "$id: FFmpegKit: ${session.command} failed with state ${session.state} and rc ${session.returnCode}\n"
                                     failCount++
                                 }
@@ -528,7 +527,7 @@ class MainActivity : BaseActivity<ActivityMainBinding>() {
 //                it.set(binding.stickerManageView, 1000)
 //            }
 //        } catch (e: Exception) {
-//            YLog.error("Error while setting max fling velocity", e)
+//            L.error("Error while setting max fling velocity", e)
 //        }
 
         stickerList.observe(this) { list ->
@@ -569,10 +568,10 @@ class MainActivity : BaseActivity<ActivityMainBinding>() {
                 }
             }
         } catch (e: Exception) {
-            YLog.error("Error while reading ignore.txt", e)
+            L.error("Error while reading ignore.txt", e)
             emptySet()
         }
-        YLog.info("ignoreIds: [${ignoreIds.joinToString { "`$it`" }}]")
+        L.info("ignoreIds: [${ignoreIds.joinToString { "`$it`" }}]")
 
         val stickerList = mutableListOf<StickerInfo>()
 
@@ -629,7 +628,7 @@ class MainActivity : BaseActivity<ActivityMainBinding>() {
 
                 stickerList.add(StickerInfo(name, id, hash, remoteState, syncedState, allSize, type, preview))
             } catch (e: Exception) {
-                YLog.error("Error while parsing ${file.name}", e)
+                L.error("Error while parsing ${file.name}", e)
             }
         }
 
@@ -639,6 +638,13 @@ class MainActivity : BaseActivity<ActivityMainBinding>() {
         this.stickerList.postValue(stickerList)
     }
 
+    /** the hook inside the client writes this marker every time it finishes a sync pass */
+    private fun isHookAlive(): Boolean = try {
+        File(syncDonePath).exists()
+    } catch (t: Throwable) {
+        false
+    }
+
     /**
      * Refresh module status
      *
@@ -646,15 +652,15 @@ class MainActivity : BaseActivity<ActivityMainBinding>() {
      */
     private fun refreshModuleStatus() {
         binding.mainLinStatus.setBackgroundResource(
-            if (YukiHookAPI.Status.isModuleActive) R.drawable.bg_green_round
+            if (isHookAlive()) R.drawable.bg_green_round
             else R.drawable.bg_dark_round
         )
         binding.mainImgStatus.setImageResource(
-            if (YukiHookAPI.Status.isModuleActive) R.mipmap.ic_success
+            if (isHookAlive()) R.mipmap.ic_success
             else R.mipmap.ic_warn
         )
         binding.mainTextStatus.text = getString(
-            if (YukiHookAPI.Status.isModuleActive) R.string.module_is_activated
+            if (isHookAlive()) R.string.module_is_activated
             else R.string.module_not_activated
         )
     }

@@ -1,97 +1,104 @@
 package cc.microblock.TGStickerProvider.hook
 
-import android.annotation.SuppressLint
-import android.app.Application
 import android.database.sqlite.SQLiteDatabase
 import cc.microblock.TGStickerProvider.*
 import cc.microblock.TGStickerProvider.hook.TelegramTLParser.SerializedData
 import cc.microblock.TGStickerProvider.hook.TelegramTLParser.TLRPC
 import cc.microblock.TGStickerProvider.utils.CachePathHelper.getCachePath
-import com.highcapable.yukihookapi.annotation.xposed.InjectYukiHookWithXposed
-import com.highcapable.yukihookapi.hook.factory.configs
-import com.highcapable.yukihookapi.hook.factory.encase
-import com.highcapable.yukihookapi.hook.log.YLog
-import com.highcapable.yukihookapi.hook.xposed.proxy.IYukiHookXposedInit
+import cc.microblock.TGStickerProvider.utils.L
+import de.robv.android.xposed.IXposedHookLoadPackage
+import de.robv.android.xposed.XposedBridge
+import de.robv.android.xposed.callbacks.XC_LoadPackage
 import java.io.File
 import java.io.FileNotFoundException
 import kotlin.concurrent.thread
 
 
-@InjectYukiHookWithXposed(entryClassName = "TGStickerProvider", isUsingXposedModuleStatus = true)
-class HookEntry : IYukiHookXposedInit {
+/**
+ * Entry point using the plain legacy Xposed API.
+ *
+ * This used to be YukiHookAPI, which hooks the application lifecycle, wraps the client's resources
+ * and gets a large part of the module dex verified inside the client process while the client is
+ * still installing its own content providers. On Android 17 that ends in ART's class linker being
+ * stuck (two threads spinning in Class::SetStatus), the client is killed by AMS with "failed to
+ * complete startup" and the user only sees the splash screen forever.
+ *
+ * So this class deliberately does nothing at injection time except log and spawn a thread that
+ * stats a file. Nothing from the TL parser is loaded until the module UI writes <data>/sync_request.
+ */
+class HookEntry : IXposedHookLoadPackage {
 
-    override fun onInit() = configs {
-        debugLog {
-            tag = "TGStickerProvider"
-            isEnable = BuildConfig.DEBUG
-        }
+    override fun handleLoadPackage(lpparam: XC_LoadPackage.LoadPackageParam) {
+        try {
+            val pkg = lpparam.packageName ?: return
+            if (pkg.startsWith("android")) return
 
-        // The old "CursorWindow.sCursorWindowSize = 100MB" patch used to live here. It is gone on
-        // purpose: it is a hidden API, it changes a process-global default for every cursor the
-        // client creates, and with modern clients it makes Telegram's storage thread die with
-        // SIGBUS (upstream issue #6). Oversized blobs are now read in chunks, see readStickerBlob().
-    }
-
-    @SuppressLint("SdCardPath")
-    override fun onHook() = encase {
-        if (this.packageName.startsWith("android")) return@encase
-
-        val pkg = this.packageName
-        val ctx = this.appContext
-
-        // Telegram forks spawn extra processes (:push, :webview, :account, ...). LSPosed hooks all
-        // of them, and every copy would run this worker against the same cache4.db and the same
-        // export folder. Only the main process does the work.
-        val processName = try {
-            Application.getProcessName()
-        } catch (t: Throwable) {
-            null
-        }
-        if (processName != null && processName != pkg) return@encase
-
-        // A detached thread that only stats a file until the module UI asks for a sync. Touching the
-        // TL parser classes this early is what deadlocks the client: the module dex is verified in
-        // the client's own class linker while the client is still defining its startup classes.
-        thread(start = true, isDaemon = true) {
-            try {
-                var lastRequest = 0L
-                while (true) {
-                    val request = File(syncRequestPath)
-                    val stamp = try {
-                        if (request.exists()) request.lastModified() else 0L
-                    } catch (t: Throwable) {
-                        0L
-                    }
-                    if (stamp > 0L && stamp != lastRequest) {
-                        lastRequest = stamp
-                        request.delete()
-                        runSyncLoop(pkg, ctx) // loops until the process dies
-                        return@thread
-                    }
-                    Thread.sleep(REQUEST_POLL_MS)
-                }
-            } catch (e: InterruptedException) {
-                // module unloaded or process shutting down
+            // Telegram forks spawn :push / :webview / :account processes; only the main one works.
+            val process = try {
+                lpparam.processName
             } catch (t: Throwable) {
-                YLog.error("worker stopped", t)
+                null
             }
+            if (process != null && process != pkg) return
+
+            XposedBridge.log("TGStickerProvider: injected into $pkg")
+
+            thread(start = true, isDaemon = true) {
+                pollForRequests(pkg)
+            }
+        } catch (t: Throwable) {
+            XposedBridge.log("TGStickerProvider: injection failed: $t")
         }
     }
 
-    private fun runSyncLoop(pkg: String, ctx: Application?) {
+    /** Idle state: file system calls only, no module classes are loaded here. */
+    private fun pollForRequests(pkg: String) {
+        try {
+            var lastRequest = 0L
+            while (true) {
+                val request = File(syncRequestPath)
+                val stamp = try {
+                    if (request.exists()) request.lastModified() else 0L
+                } catch (t: Throwable) {
+                    0L
+                }
+                if (stamp > 0L && stamp != lastRequest) {
+                    lastRequest = stamp
+                    try {
+                        request.delete()
+                    } catch (t: Throwable) {
+                        // without all-files access the file stays; the stamp check still makes sure
+                        // the same request is only served once per process
+                    }
+                    runSyncLoop(pkg) // loops until the process dies
+                    return
+                }
+                Thread.sleep(REQUEST_POLL_MS)
+            }
+        } catch (e: InterruptedException) {
+            // process shutting down
+        } catch (t: Throwable) {
+            L.error("worker stopped", t)
+        }
+    }
+
+    private fun runSyncLoop(pkg: String) {
         val ignoreSet = HashSet<Int>()
         val dataPath = "/data/data/$pkg/"
-        val tgCachePath = getCachePath(ctx, pkg)
+        val tgCachePath = getCachePath(pkg)
 
-        if (!File(tgspDataPath).exists()) {
-            File(tgspDataPath).mkdirs()
-            File(stickerDataPath).mkdirs()
-            File(syncFlagsPath).mkdirs()
-            File(destDataPath).mkdirs()
-        }
-
-        if (!File(nomediaPath).exists()) {
-            File(nomediaPath).createNewFile()
+        try {
+            if (!File(tgspDataPath).exists()) {
+                File(tgspDataPath).mkdirs()
+                File(stickerDataPath).mkdirs()
+                File(syncFlagsPath).mkdirs()
+                File(destDataPath).mkdirs()
+            }
+            if (!File(nomediaPath).exists()) {
+                File(nomediaPath).createNewFile()
+            }
+        } catch (t: Throwable) {
+            L.warn("cannot prepare export folders", t)
         }
 
         while (true) {
@@ -106,15 +113,15 @@ class HookEntry : IYukiHookXposedInit {
                     checkDb("${it.path}/cache4.db", tgCachePath, ignoreSet)
                 }
             } catch (e: Exception) {
-                YLog.debug(e.toString())
+                L.debug(e.toString())
             } catch (t: Throwable) {
-                YLog.error("sync pass failed", t)
+                L.error("sync pass failed", t)
             }
 
             try {
                 File(syncDonePath).writeText(System.currentTimeMillis().toString())
             } catch (t: Throwable) {
-                YLog.warn("cannot write sync marker", t)
+                L.warn("cannot write sync marker", t)
             }
 
             Thread.sleep(40 * 1000)
@@ -173,7 +180,7 @@ class HookEntry : IYukiHookXposedInit {
                 val data = try {
                     readStickerBlob(db, id, row[2])
                 } catch (t: Throwable) {
-                    YLog.error("Failed to read sticker blob id=$id", t)
+                    L.error("Failed to read sticker blob id=$id", t)
                     null
                 } ?: continue
 
@@ -194,7 +201,7 @@ class HookEntry : IYukiHookXposedInit {
                                 constructorId = stream.readInt32(true)
 
                             if (!TLRPC.TL_messages_stickerSet.isStickerSetConstructor(constructorId)) {
-                                YLog.error("Break on $dbPath::stickers_v2 type $id index $i; $constructorId is not a sticker set")
+                                L.error("Break on $dbPath::stickers_v2 type $id index $i; $constructorId is not a sticker set")
                                 break
                             }
 
@@ -205,11 +212,11 @@ class HookEntry : IYukiHookXposedInit {
                             dedupSet.add(hash)
                             stickerSets.add(stickerSet)
                         } catch (e: Exception) {
-                            YLog.error("Failed to deserialize $dbPath::stickers_v2 type $id index $i", e)
+                            L.error("Failed to deserialize $dbPath::stickers_v2 type $id index $i", e)
                         }
                     }
                 } catch (e: Exception) {
-                    YLog.warn("", e)
+                    L.warn("", e)
                     continue
                 }
             }
@@ -234,7 +241,7 @@ class HookEntry : IYukiHookXposedInit {
                     if (e is FileNotFoundException && e.message?.contains("open failed:") == true)
                         continue // has occupied by another app
 
-                    YLog.error("Failed to handle ${stickerNameFile.absolutePath}", e)
+                    L.error("Failed to handle ${stickerNameFile.absolutePath}", e)
                     continue
                 }
 
@@ -293,7 +300,7 @@ class HookEntry : IYukiHookXposedInit {
                 }
 
                 if (printLog)
-                    YLog.debug("*new* [${lowQualityCount + highQualityCount}(Low$lowQualityCount High${highQualityCount})/${stickerSet.set.count}] ${stickerSet.set.title} ${stickerSet.set.short_name} ${stickerSet.set.count} ${stickerSet.set.hash}")
+                    L.debug("*new* [${lowQualityCount + highQualityCount}(Low$lowQualityCount High${highQualityCount})/${stickerSet.set.count}] ${stickerSet.set.title} ${stickerSet.set.short_name} ${stickerSet.set.count} ${stickerSet.set.hash}")
                 if (fullSync) ignoreSet.add(stickerSet.set.hash)
             }
         }

@@ -1,9 +1,9 @@
 package cc.microblock.TGStickerProvider.application
 
+import android.app.Application
 import androidx.appcompat.app.AppCompatDelegate
-import com.highcapable.yukihookapi.hook.xposed.application.ModuleApplication
 
-class DefaultApplication : ModuleApplication() {
+class DefaultApplication : Application() {
 
     override fun onCreate() {
         super.onCreate()
@@ -12,6 +12,5 @@ class DefaultApplication : ModuleApplication() {
          * Follow system night mode
          */
         AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM)
-        // Your code here.
     }
 }

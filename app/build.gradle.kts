@@ -1,7 +1,6 @@
 plugins {
     autowire(libs.plugins.android.application)
     autowire(libs.plugins.kotlin.android)
-    autowire(libs.plugins.kotlin.ksp)
 }
 
 android {
@@ -63,8 +62,6 @@ dependencies {
     implementation("androidx.appcompat:appcompat:1.6.1")
     implementation("androidx.recyclerview:recyclerview")
     compileOnly(de.robv.android.xposed.api)
-    implementation(com.highcapable.yukihookapi.api)
-    ksp(com.highcapable.yukihookapi.ksp.xposed)
     implementation(com.github.duanhong169.drawabletoolbox)
     implementation(androidx.core.core.ktx)
     implementation(androidx.appcompat.appcompat)

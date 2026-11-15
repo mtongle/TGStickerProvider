@@ -4,16 +4,15 @@ package cc.microblock.TGStickerProvider.ui.activity.base
 
 import android.os.Build
 import android.os.Bundle
+import android.view.LayoutInflater
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.res.ResourcesCompat
 import androidx.core.view.WindowCompat
 import androidx.viewbinding.ViewBinding
-import com.highcapable.yukihookapi.hook.factory.current
-import com.highcapable.yukihookapi.hook.factory.method
-import com.highcapable.yukihookapi.hook.type.android.LayoutInflaterClass
 import cc.microblock.TGStickerProvider.R
 import cc.microblock.TGStickerProvider.utils.factory.isNotSystemInDarkMode
 import cc.microblock.TGStickerProvider.*
+import java.lang.reflect.ParameterizedType
 
 abstract class BaseActivity<VB : ViewBinding> : AppCompatActivity() {
 
@@ -26,10 +25,7 @@ abstract class BaseActivity<VB : ViewBinding> : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        binding = current().generic()?.argument()?.method {
-            name = "inflate"
-            param(LayoutInflaterClass)
-        }?.get()?.invoke<VB>(layoutInflater) ?: error("binding failed")
+        binding = inflateBinding()
         setContentView(binding.root)
         /**
          * Hide Activity title bar
@@ -51,9 +47,21 @@ abstract class BaseActivity<VB : ViewBinding> : AppCompatActivity() {
         }
         /**
          * Init children
+         *
          * 装载子类
          */
         onCreate()
+    }
+
+    /**
+     * Calls the generated `inflate(LayoutInflater)` of the `ViewBinding` subclass this activity was
+     * parameterised with. (Previously done through YukiHookAPI's reflection DSL, which is gone.)
+     */
+    private fun inflateBinding(): VB {
+        val bindingClass = (this::class.java.genericSuperclass as ParameterizedType)
+            .actualTypeArguments[0] as Class<*>
+        return bindingClass.getMethod("inflate", LayoutInflater::class.java)
+            .invoke(null, layoutInflater) as VB
     }
 
     /**
