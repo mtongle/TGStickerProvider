@@ -299,11 +299,16 @@ class MainActivity : BaseActivity<ActivityMainBinding>() {
                             val outPath = "${syncedFolder}/${nameWithoutExt}.gif"
                             if (!File(outPath).exists()) {
 
+                                val input = remoteFile.absolutePath
+                                // canonical split -> palettegen -> paletteuse chain. The previous
+                                // "split[v],palettegen,[v]paletteuse" form is not a valid filter
+                                // graph and is rejected outright by ffmpeg 8.
+                                val filter = if (act.useHighQualityGif)
+                                    "[0:v]split[a][b];[a]palettegen=stats_mode=diff[p];[b][p]paletteuse=dither=sierra2_4a"
+                                else
+                                    "[0:v]fps=10,scale=320:-1:flags=lanczos,split[a][b];[a]palettegen[p];[b][p]paletteuse"
                                 val session = FFmpegKit.execute(
-                                    if(act.useHighQualityGif)
-                                        "-i ${remoteFile.absolutePath} -lavfi split[v],palettegen,[v]paletteuse -f gif ${outPath}"
-                                    else
-                                        "-i ${remoteFile.absolutePath} -vf scale=320:-1 -r 10 -f gif ${outPath}"
+                                    "-y -i '${input}' -filter_complex '${filter}' -loop 0 -f gif '${outPath}'"
                                 )
                                 if (session.returnCode.isValueSuccess) {
                                     YLog.info("FFmpegKit: ${session.command} finished successfully")

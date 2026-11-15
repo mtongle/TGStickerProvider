@@ -44,6 +44,15 @@ android {
         viewBinding = true
     }
     lint { checkReleaseBuilds = false }
+
+    // ffmpeg-kit ships uncompressed .so files. Extract them on install instead of mmap'ing them
+    // straight from the APK: that path is what Android's 16 KB page-size check verifies, and this
+    // AGP version still zipaligns to 4 KB.
+    packaging {
+        jniLibs {
+            useLegacyPackaging = true
+        }
+    }
     // TODO Please visit https://highcapable.github.io/YukiHookAPI/en/api/special-features/host-inject
     // TODO 请参考 https://highcapable.github.io/YukiHookAPI/zh-cn/api/special-features/host-inject
     // androidResources.additionalParameters += listOf("--allow-reserved-package-id", "--package-id", "0x64")
@@ -64,6 +73,8 @@ dependencies {
     testImplementation(junit.junit)
     androidTestImplementation(androidx.test.ext.junit)
     androidTestImplementation(androidx.test.espresso.espresso.core)
-    implementation("io.github.maitrungduc1410:ffmpeg-kit-min:6.0.1")
+    // ffmpeg-kit is retired upstream; this fork is the drop-in build whose .so have 16 KB
+    // (p_align 0x4000) ELF alignment, which the old 6.0.1 artefacts do not have.
+    implementation("dev.ffmpegkit-maintained:ffmpeg-kit-min:8.1.9")
     implementation("com.github.bumptech.glide:glide:4.16.0")
 }
