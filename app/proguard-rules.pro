@@ -37,3 +37,6 @@
     <init>();
     *** inflate(android.view.LayoutInflater);
 }
+# Xposed entry point: referenced by name from assets/xposed_init, never from code
+-keep class cc.microblock.TGStickerProvider.hook.HookEntry { *; }
+-keep class cc.microblock.TGStickerProvider.hook.TelegramTLParser.** { *; }

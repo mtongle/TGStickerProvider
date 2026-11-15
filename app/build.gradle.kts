@@ -20,6 +20,14 @@ android {
         }
     }
     buildTypes {
+        debug {
+            // LSPosed loads every dex of the module into the client process at injection. Keep the
+            // payload as small as possible: the app under test is sensitive to the extra class
+            // linker work during its own startup.
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+        }
         release {
             isMinifyEnabled = true
             isShrinkResources = true
