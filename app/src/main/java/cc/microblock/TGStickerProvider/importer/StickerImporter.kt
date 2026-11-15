@@ -189,23 +189,62 @@ class StickerImporter(private val context: Context) {
 
     private fun copyWanted(): Int {
         var copied = 0
+        var missing = 0
+        val failures = ArrayList<String>()
         wanted.forEach { (src, dest) ->
+            if (!src.exists() || src.length() == 0L) {
+                missing++
+                return@forEach
+            }
             try {
-                if (!src.exists()) return@forEach
                 dest.parentFile?.mkdirs()
                 if (dest.exists() && dest.length() == src.length()) {
                     copied++
                     return@forEach
                 }
-                src.copyTo(dest, overwrite = true)
-                // a high-quality file makes its low-quality sibling redundant
-                if (dest.name.endsWith("_high.webp") || dest.name.endsWith("_high.webm")) {
-                    File(dest.parentFile, dest.name.replace("_high.", "_low.")).delete()
+                var done = false
+                var last: Throwable? = null
+                for (attempt in 1..3) {
+                    try {
+                        src.copyTo(dest, overwrite = true)
+                        done = true
+                        break
+                    } catch (t: Throwable) {
+                        last = t
+                        try {
+                            Thread.sleep(150)
+                        } catch (ignored: InterruptedException) {
+                        }
+                    }
                 }
-                copied++
+                if (done) {
+                    // a high-quality file makes its low-quality sibling redundant
+                    if (dest.name.endsWith("_high.webp") || dest.name.endsWith("_high.webm")) {
+                        File(dest.parentFile, dest.name.replace("_high.", "_low.")).delete()
+                    }
+                    copied++
+                } else {
+                    failures.add("${src.name} -> ${dest.path}: ${last?.javaClass?.simpleName}: ${last?.message}")
+                }
             } catch (t: Throwable) {
-                errors.add("${src.name}: ${t.message}")
+                failures.add("${src.name}: ${t.javaClass.simpleName}: ${t.message}")
             }
+        }
+
+        if (failures.isNotEmpty() || missing > 0) {
+            try {
+                val log = File(dumpRoot(), "last_import.log")
+                log.writeText(
+                    buildString {
+                        appendLine("copied=$copied missing=$missing failed=${failures.size}")
+                        failures.take(200).forEach { appendLine(it) }
+                    }
+                )
+                L.warn("import log: ${log.absolutePath}")
+            } catch (t: Throwable) {
+                L.warn("cannot write import log", t)
+            }
+            if (failures.isNotEmpty()) errors.add(failures.first())
         }
         return copied
     }
