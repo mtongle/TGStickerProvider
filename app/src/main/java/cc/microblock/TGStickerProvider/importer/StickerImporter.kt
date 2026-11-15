@@ -243,7 +243,9 @@ class StickerImporter(private val context: Context) {
         } catch (t: Throwable) {
             L.warn("cannot write diagnostics", t)
         }
-        return diag.takeLast(8000)
+        // The dialog only shows the head: id + the top-level listings are what identify the problem,
+        // and they must fit one screenshot. The whole log is in diagnostics.txt.
+        return diag.take(1500)
     }
 
     private fun parseDb(dbFile: File, cachePath: String) {

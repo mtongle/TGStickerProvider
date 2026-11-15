@@ -259,7 +259,14 @@ class MainActivity : BaseActivity<ActivityMainBinding>() {
                     AlertDialog.Builder(this)
                         .setTitle("诊断信息")
                         .setMessage(outcome.diagnostics)
-                        .setPositiveButton("好", null)
+                        .setPositiveButton("复制") { _, _ ->
+                            val clipboard = getSystemService(CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                            clipboard.setPrimaryClip(
+                                android.content.ClipData.newPlainText("diagnostics", outcome.diagnostics)
+                            )
+                            Toast.makeText(this, "已复制", Toast.LENGTH_SHORT).show()
+                        }
+                        .setNegativeButton("关闭", null)
                         .show()
                 }
             }
