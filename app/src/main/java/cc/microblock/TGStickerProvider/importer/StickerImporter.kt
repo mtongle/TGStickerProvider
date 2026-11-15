@@ -151,19 +151,77 @@ class StickerImporter(private val context: Context) {
         val copied = RootShell.runScript(copyFile, timeoutSeconds = 240)
         val output = (listed.stdout + listed.stderr + copied.stderr).trim()
 
-        val byPackage = HashMap<String, List<File>>()
-        CLIENT_PACKAGES.forEach { pkg ->
-            val dbs = File(work, pkg).listFiles { f -> f.name.endsWith(".db") && f.length() > 0 }?.toList()
-            if (!dbs.isNullOrEmpty()) byPackage[pkg] = dbs
+        var scanOutput = output
+
+        // Nothing under the known package names? Search the whole of /data for the database and take
+        // the package name from the path instead of assuming it.
+        var byPackage = group(work)
+        if (byPackage.isEmpty()) {
+            val deepScript = StringBuilder()
+            deepScript.appendLine("echo TGSP_ROOT_OK")
+            deepScript.appendLine("find /data -maxdepth 6 -type f -name 'cache4.db' 2>/dev/null | head -20")
+            deepScript.appendLine("echo TGSP_DONE")
+            val deepFile = File(context.cacheDir, "tgsp_deep_find.sh")
+            deepFile.writeText(deepScript.toString())
+            val deep = RootShell.runScript(deepFile, timeoutSeconds = 300)
+            scanOutput = (scanOutput + "\n" + deep.stdout + deep.stderr).trim()
+
+            val hits = deep.stdout.lineSequence()
+                .map { it.trim() }
+                .filter { it.endsWith("/cache4.db") }
+                .toList()
+            if (hits.isNotEmpty()) {
+                val copyDeep = StringBuilder()
+                copyDeep.appendLine("mkdir -p ${RootShell.quote(work.absolutePath)}")
+                var i = 0
+                hits.forEach { src ->
+                    val pkg = packageOfPath(src)
+                    val pkgDir = File(work, pkg)
+                    copyDeep.appendLine("mkdir -p ${RootShell.quote(pkgDir.absolutePath)}")
+                    copyDeep.appendLine(
+                        "cp -f ${RootShell.quote(src)} ${RootShell.quote(File(pkgDir, "%02d".format(i++) + ".db").absolutePath)}"
+                    )
+                }
+                val copyDeepFile = File(context.cacheDir, "tgsp_copy_deep.sh")
+                copyDeepFile.writeText(copyDeep.toString())
+                RootShell.runScript(copyDeepFile, timeoutSeconds = 300)
+                byPackage = group(work)
+            }
         }
-        L.info("root=$rootWorked clients=${byPackage.keys} out=${output.take(200)}")
-        return PullResult(rootWorked, byPackage, output)
+        L.info("root=$rootWorked clients=${byPackage.keys} out=${scanOutput.take(200)}")
+        return PullResult(rootWorked, byPackage, scanOutput)
+    }
+
+    private fun group(work: File): Map<String, List<File>> {
+        val byPackage = HashMap<String, List<File>>()
+        val dirs = work.listFiles { f -> f.isDirectory } ?: return byPackage
+        dirs.forEach { dir ->
+            val dbs = dir.listFiles { f -> f.name.endsWith(".db") && f.length() > 0 }?.toList()
+            if (!dbs.isNullOrEmpty()) byPackage[dir.name] = dbs
+        }
+        return byPackage
+    }
+
+    /** /data/data/<pkg>/... or /data/user/0/<pkg>/... */
+    private fun packageOfPath(path: String): String {
+        val parts = path.split('/').filter { it.isNotEmpty() }
+        return when {
+            parts.size > 3 && parts[0] == "data" && parts[1] == "data" -> parts[2]
+            parts.size > 4 && parts[0] == "data" && parts[1] == "user" -> parts[3]
+            else -> "unknown"
+        }
     }
 
     /** nothing found: show the user (and us) what the client's data dir actually looks like */
     private fun diagnose(pullOutput: String): String {
         val script = StringBuilder()
         script.appendLine("echo DIAG-BEGIN")
+        script.appendLine("id")
+        script.appendLine("ls -la / | head -30")
+        script.appendLine("ls -la /data | head -30")
+        script.appendLine("ls /data/data 2>&1 | head -40")
+        script.appendLine("ls /data/user/0 2>&1 | head -40")
+        script.appendLine("find /data -maxdepth 6 -name 'cache4.db' 2>/dev/null | head -20")
         CLIENT_PACKAGES.forEach { pkg ->
             script.appendLine("echo '## $pkg'")
             script.appendLine("ls -la ${RootShell.quote("/data/data/$pkg")} 2>&1 | head -25")
@@ -177,8 +235,15 @@ class StickerImporter(private val context: Context) {
         val scriptFile = File(context.cacheDir, "tgsp_diag.sh")
         scriptFile.writeText(script.toString())
         val result = RootShell.runScript(scriptFile, timeoutSeconds = 120)
-        val diag = (result.stdout + result.stderr).trim()
-        return ("pull:\n" + pullOutput.takeLast(600) + "\n" + diag).takeLast(6000)
+        val diag = ("pull:\n" + pullOutput.takeLast(1500) + "\n" + result.stdout + result.stderr).trim()
+        val dump = File(context.getExternalFilesDir(null) ?: context.filesDir, "diagnostics.txt")
+        try {
+            dump.writeText(diag)
+            L.warn("diagnostics written to ${dump.absolutePath}")
+        } catch (t: Throwable) {
+            L.warn("cannot write diagnostics", t)
+        }
+        return diag.takeLast(8000)
     }
 
     private fun parseDb(dbFile: File, cachePath: String) {
