@@ -56,7 +56,8 @@ class StickerImporter(private val context: Context) {
             return Outcome(
                 0, 0, 0, errors,
                 error = if (suMissing)
-                    "系统里找不到 su 可执行文件（诊断信息里列了找过的路径）"
+                    "找不到 su：root 授权是在进程启动时注入的，授权后请「强制停止」本应用再重新打开；" +
+                            "若仍找不到，说明 root 管理器没给应用提供 su（KernelSU 请检查 su 兼容/隐藏设置）"
                 else
                     "su 存在但命令没有执行：确认 KernelSU 已给本应用授权（更新过 APK 可能要重新授权）",
                 diagnostics = RootShell.describeState() + "\npull:\n" + pulled.output.takeLast(1200)
