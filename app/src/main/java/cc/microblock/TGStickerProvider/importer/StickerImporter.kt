@@ -93,7 +93,12 @@ class StickerImporter(private val context: Context) {
         return Outcome(setCount, copied, lowQualityCount, errors, error = null, diagnostics = "")
     }
 
-    private data class PullResult(val rootWorked: Boolean, val byPackage: Map<String, List<File>>, val output: String)
+    private data class PullResult(
+        val rootWorked: Boolean,
+        val byPackage: Map<String, List<File>>,
+        val output: String,
+        val hits: Int
+    )
 
     /**
      * One su call for everything: prove root ran (the sentinel line), then copy the main and per-account
@@ -101,77 +106,45 @@ class StickerImporter(private val context: Context) {
      * which client exists, so no separate package detection is needed.
      */
     private fun pullDatabases(work: File): PullResult {
-        // 1. Which telegram-ish packages exist at all? Never trust the hard-coded list: the client may
-        //    be a fork we do not know, and its data may live under /data/user/<n>.
-        val discover = StringBuilder()
-        discover.appendLine("echo TGSP_ROOT_OK")
-        discover.appendLine("ls /data/data 2>/dev/null | grep -iE 'telegram|nagram|messenger|nullgram'")
-        discover.appendLine("ls /data/user/0 2>/dev/null | grep -iE 'telegram|nagram|messenger|nullgram'")
-        discover.appendLine("echo TGSP_DONE")
-        val discoverFile = File(context.cacheDir, "tgsp_discover.sh")
-        discoverFile.writeText(discover.toString())
-        val discovered = RootShell.runScript(discoverFile, timeoutSeconds = 120)
-        val rootWorked = discovered.stdout.contains("TGSP_ROOT_OK")
+        // One global search is the truth: it covers /data/data (symlink to /data/user/0), every other
+        // user profile (/data/user/<n>) and any layout a fork invented. No package names needed.
+        val findScript = StringBuilder()
+        findScript.appendLine("echo TGSP_ROOT_OK")
+        findScript.appendLine("id")
+        findScript.appendLine("find /data -maxdepth 7 -type f -name 'cache4.db' 2>/dev/null | head -40")
+        findScript.appendLine("echo TGSP_DONE")
+        val findFile = File(context.cacheDir, "tgsp_find_db.sh")
+        findFile.writeText(findScript.toString())
+        val found = RootShell.runScript(findFile, timeoutSeconds = 300)
+        val rootWorked = found.stdout.contains("TGSP_ROOT_OK")
 
-        val candidates = LinkedHashSet<String>()
-        candidates.addAll(CLIENT_PACKAGES)
-        discovered.stdout.lineSequence()
+        val hits = found.stdout.lineSequence()
             .map { it.trim() }
-            .filter { line -> line.isNotEmpty() && !line.startsWith("TGSP_") && line.contains('.') }
-            .forEach { line -> candidates.add(line) }
+            .filter { it.endsWith("/cache4.db") }
+            .distinct()
+            .toList()
 
-        // 2. find cache4.db for every candidate, in both /data/data and /data/user/0 layouts
-        val listScript = StringBuilder()
-        listScript.appendLine("echo TGSP_ROOT_OK")
-        candidates.forEach { pkg ->
-            listScript.appendLine("echo '###$pkg'")
-            listScript.appendLine(
-                "find ${RootShell.quote("/data/data/$pkg")} -maxdepth 5 -type f -name 'cache4.db' 2>/dev/null"
-            )
-            listScript.appendLine(
-                "find ${RootShell.quote("/data/user/0/$pkg")} -maxdepth 5 -type f -name 'cache4.db' 2>/dev/null"
-            )
-        }
-        listScript.appendLine("echo TGSP_DONE")
-        val listFile = File(context.cacheDir, "tgsp_list_db.sh")
-        listFile.writeText(listScript.toString())
-        val listed = RootShell.runScript(listFile, timeoutSeconds = 240)
-
-        val found = LinkedHashMap<String, MutableList<String>>()
-        var current: String? = null
-        listed.stdout.lineSequence().forEach { raw ->
-            val line = raw.trim()
-            if (line.startsWith("###")) {
-                current = line.removePrefix("###")
-                found.getOrPut(current!!) { ArrayList() }
-            } else if (line.endsWith("cache4.db") && current != null) {
-                found[current!!]?.add(line)
-            }
-        }
-
-        // 3. copy what was found into our own cache dir
-        val copyScript = StringBuilder()
-        copyScript.appendLine("mkdir -p ${RootShell.quote(work.absolutePath)}")
-        var index = 0
-        found.forEach { (pkg, paths) ->
-            if (paths.isEmpty()) return@forEach
-            val pkgDir = File(work, pkg)
-            copyScript.appendLine("mkdir -p ${RootShell.quote(pkgDir.absolutePath)}")
-            paths.distinct().forEach { src ->
-                val name = "%02d".format(index++) + ".db"
+        if (hits.isNotEmpty()) {
+            val copyScript = StringBuilder()
+            copyScript.appendLine("mkdir -p ${RootShell.quote(work.absolutePath)}")
+            var index = 0
+            hits.forEach { src ->
+                val pkg = packageOfPath(src)
+                val pkgDir = File(work, pkg)
+                copyScript.appendLine("mkdir -p ${RootShell.quote(pkgDir.absolutePath)}")
                 copyScript.appendLine(
-                    "cp -f ${RootShell.quote(src)} ${RootShell.quote(File(pkgDir, name).absolutePath)}"
+                    "cp -f ${RootShell.quote(src)} ${RootShell.quote(File(pkgDir, "%02d".format(index++) + ".db").absolutePath)}"
                 )
             }
+            val copyFile = File(context.cacheDir, "tgsp_copy_db.sh")
+            copyFile.writeText(copyScript.toString())
+            RootShell.runScript(copyFile, timeoutSeconds = 300)
         }
-        val copyFile = File(context.cacheDir, "tgsp_copy_db.sh")
-        copyFile.writeText(copyScript.toString())
-        RootShell.runScript(copyFile, timeoutSeconds = 300)
 
-        val output = (discovered.stdout + listed.stdout + listed.stderr).trim()
+        val output = (found.stdout + found.stderr).trim()
         val byPackage = group(work)
-        L.info("root=$rootWorked candidates=$candidates clients=${byPackage.keys}")
-        return PullResult(rootWorked, byPackage, output)
+        L.info("root=$rootWorked hits=${hits.size} clients=${byPackage.keys}")
+        return PullResult(rootWorked, byPackage, output, hits.size)
     }
 
     private fun group(work: File): Map<String, List<File>> {
@@ -194,20 +167,20 @@ class StickerImporter(private val context: Context) {
         }
     }
 
-    /** nothing found: the few lines that identify why */
+    /** nothing found: a one line verdict plus the lines that identify why */
     private fun diagnose(pullOutput: String): String {
         val script = StringBuilder()
         script.appendLine("echo DIAG-BEGIN")
         script.appendLine("id")
+        script.appendLine("echo '--- users'")
+        script.appendLine("ls -d /data/user/* 2>&1")
         script.appendLine("echo '--- mounts'")
-        script.appendLine("ls -ld /data /data/data /data/user /data/user/0 2>&1")
+        script.appendLine("ls -ld /data /data/data /data/user/0 2>&1")
         script.appendLine("echo '--- own dir'")
         script.appendLine("ls -ld /data/data/cc.microblock.TGStickerProvider 2>&1")
         script.appendLine("echo '--- telegram-ish'")
-        script.appendLine("ls /data/data 2>/dev/null | grep -iE 'telegram|nagram|messenger|nullgram' | head -10")
         script.appendLine("ls /data/user/0 2>/dev/null | grep -iE 'telegram|nagram|messenger|nullgram' | head -10")
-        script.appendLine("echo '--- db'")
-        script.appendLine("find /data -maxdepth 6 -name 'cache4.db' 2>/dev/null | head -10")
+        script.appendLine("ls -d /data/user/*/* 2>/dev/null | grep -iE 'telegram|nagram|messenger' | head -10")
         script.appendLine("echo DIAG-END")
 
         val scriptFile = File(context.cacheDir, "tgsp_diag.sh")
@@ -223,7 +196,9 @@ class StickerImporter(private val context: Context) {
         }
         // The dialog only shows the head: id + the top-level listings are what identify the problem,
         // and they must fit one screenshot. The whole log is in diagnostics.txt.
-        return diag.take(1500)
+        val uidLine = diag.lineSequence().firstOrNull { it.startsWith("uid=") }?.trim() ?: "uid=?"
+        val users = diag.lineSequence().count { it.startsWith("/data/user/") }
+        return "结论: $uidLine · 找到 cache4.db 0 个 · /data/user 可见 $users 个\n" + diag.take(1200)
     }
 
     private fun parseDb(dbFile: File, cachePath: String) {
