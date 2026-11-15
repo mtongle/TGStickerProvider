@@ -52,10 +52,14 @@ class StickerImporter(private val context: Context) {
         progress("读取数据库（root）")
         val pulled = pullDatabases(work)
         if (!pulled.rootWorked) {
+            val suMissing = RootShell.suPath() == null
             return Outcome(
                 0, 0, 0, errors,
-                error = "su 没有真正执行命令：请确认 KernelSU 里已给本应用授权（若刚更新过 APK 需要重新授权）",
-                diagnostics = pulled.output.takeLast(1500)
+                error = if (suMissing)
+                    "系统里找不到 su 可执行文件（诊断信息里列了找过的路径）"
+                else
+                    "su 存在但命令没有执行：确认 KernelSU 已给本应用授权（更新过 APK 可能要重新授权）",
+                diagnostics = RootShell.describeState() + "\npull:\n" + pulled.output.takeLast(1200)
             )
         }
         val dbs = pulled.byPackage.entries.firstOrNull { clientPackage == null || it.key == clientPackage }

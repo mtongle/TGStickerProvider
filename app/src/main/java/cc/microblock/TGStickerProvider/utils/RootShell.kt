@@ -23,8 +23,60 @@ object RootShell {
     var lastResult: Result? = null
         private set
 
+    /**
+     * Where su actually lives differs per root implementation: Magisk keeps it in /debug_ramdisk or
+     * /system/bin, KernelSU only ships /data/adb/ksu/bin/su on many devices and does not always
+     * create the /system/bin symlink. ProcessBuilder("su", ...) then fails with ENOENT, which used
+     * to look like "no root granted".
+     */
+    private val SU_CANDIDATES = listOf(
+        "/system/bin/su", "/system/xbin/su", "/sbin/su", "/su/bin/su",
+        "/data/local/xbin/su", "/data/local/bin/su", "/system/sd/xbin/su",
+        "/system/bin/failsafe/su", "/data/adb/ksu/bin/su", "/data/adb/magisk/su",
+        "/debug_ramdisk/su", "/data/local/su"
+    )
+
+    @Volatile
+    private var resolvedSu: String? = null
+
     @Volatile
     private var cachedAvailable: Boolean? = null
+
+    /** first usable su binary: what PATH offers, then the well-known paths */
+    fun suPath(): String? {
+        resolvedSu?.let { path -> if (File(path).exists()) return path }
+        val script = "command -v su 2>/dev/null; " +
+                "for p in " + SU_CANDIDATES.joinToString(" ") + "; do [ -x \"\$p\" ] && echo \"\$p\"; done"
+        for (shell in listOf("/system/bin/sh", "sh")) {
+            try {
+                val process = ProcessBuilder(shell, "-c", script).redirectErrorStream(true).start()
+                val output = process.inputStream.bufferedReader().use { it.readText() }
+                process.waitFor()
+                val found = output.lineSequence()
+                    .map { it.trim() }
+                    .firstOrNull { it.isNotEmpty() && File(it).exists() }
+                if (found != null) {
+                    resolvedSu = found
+                    return found
+                }
+            } catch (t: Throwable) {
+                L.warn("su probe via $shell failed", t)
+            }
+        }
+        return null
+    }
+
+    /** human readable state for the diagnostics dialog */
+    fun describeState(): String {
+        val su = suPath()
+        val existing = SU_CANDIDATES.filter { File(it).exists() }
+        return buildString {
+            appendLine("su 路径: ${su ?: "未找到"}")
+            appendLine("发现的候选: ${existing.ifEmpty { listOf("无") }.joinToString(", ")}")
+            appendLine("PATH: ${System.getenv("PATH") ?: ""}")
+            appendLine("上次结果: ${lastResult?.summary()?.take(300) ?: "无"}")
+        }
+    }
 
     /**
      * Never probes on its own: every `su` invocation can raise a KernelSU prompt, so the UI asks for
@@ -46,19 +98,21 @@ object RootShell {
 
     /** runs `su -c` when it is supported, falls back to feeding stdin */
     fun run(command: String, timeoutSeconds: Long = 120): Result {
-        val viaDashC = exec(listOf("su", "-c", command), null, timeoutSeconds)
+        val su = suPath() ?: return Result(-1, "", "no su binary found").also { lastResult = it }
+        val viaDashC = exec(listOf(su, "-c", command), null, timeoutSeconds)
         if (viaDashC.ok || atLeastSomethingRan(viaDashC)) {
             lastResult = viaDashC
             return viaDashC
         }
-        val viaStdin = exec(listOf("su"), "$command\nexit\n", timeoutSeconds)
+        val viaStdin = exec(listOf(su), "$command\nexit\n", timeoutSeconds)
         lastResult = viaStdin
         return viaStdin
     }
 
     /** runs a script file through stdin - what KernelSU/APatch expect */
     fun runScript(script: File, timeoutSeconds: Long = 300): Result {
-        val result = exec(listOf("su"), "sh '${script.absolutePath}'\nexit\n", timeoutSeconds)
+        val su = suPath() ?: return Result(-1, "", "no su binary found").also { lastResult = it }
+        val result = exec(listOf(su), "sh '${script.absolutePath}'\nexit\n", timeoutSeconds)
         lastResult = result
         return result
     }
