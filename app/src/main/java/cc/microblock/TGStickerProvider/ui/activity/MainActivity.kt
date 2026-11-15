@@ -235,21 +235,8 @@ class MainActivity : BaseActivity<ActivityMainBinding>() {
      * client fail to finish its startup, so the work happens in our own process with `su`.
      */
     private fun importFromClient() {
-        val client = detectedClientPackage()
-        if (client == null) {
-            val message = if (!RootShell.isAvailable())
-                "需要 root 权限：请允许本应用的 su 请求后再试"
-            else
-                "没有找到已安装的 Telegram 客户端（支持 NagramXF / Nagram / NagramX / NullGram / 官方版）"
-            runOnUiThread {
-                Toast.makeText(this, message, Toast.LENGTH_LONG).show()
-            }
-            return
-        }
         val outcome = try {
-            StickerImporter(this).import(client) { stage ->
-                L.info("import: $stage")
-            }
+            StickerImporter(this).import(null) { stage -> L.info("import: $stage") }
         } catch (t: Throwable) {
             L.error("import failed", t)
             runOnUiThread {
@@ -257,17 +244,18 @@ class MainActivity : BaseActivity<ActivityMainBinding>() {
             }
             return
         }
+
         L.info("import done: sets=${outcome.sets} files=${outcome.copiedFiles} errors=${outcome.errors.size}")
-        if (outcome.errors.isNotEmpty()) {
-            val first = outcome.errors.first()
-            runOnUiThread {
-                Toast.makeText(this, "部分失败：$first", Toast.LENGTH_LONG).show()
-            }
+        val message = when {
+            outcome.error != null -> outcome.error
+            outcome.sets == 0 -> "没有读到表情包（客户端里先看一眼表情，让它写入缓存）"
+            outcome.errors.isNotEmpty() -> "部分失败：${outcome.errors.first()}"
+            else -> null
+        }
+        if (message != null) {
+            runOnUiThread { Toast.makeText(this, message, Toast.LENGTH_LONG).show() }
         }
     }
-
-    /** first installed client from the list we know how to read (detected through root) */
-    private fun detectedClientPackage(): String? = StickerImporter.detectClients().firstOrNull()
 
     private fun onGainedPermission() {
         Toast.makeText(
