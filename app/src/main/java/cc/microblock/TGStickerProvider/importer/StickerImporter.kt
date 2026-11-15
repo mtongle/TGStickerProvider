@@ -85,7 +85,7 @@ class StickerImporter(private val context: Context) {
         Materialising.writeNomedia()
         RootShell.rememberAvailable(true)
 
-        return Outcome(setCount, copied, lowQualityCount, errors, error = null, debug = "")
+        return Outcome(setCount, copied, lowQualityCount, errors, error = null, diagnostics = "")
     }
 
     private data class PullResult(val rootWorked: Boolean, val byPackage: Map<String, List<File>>, val output: String)
