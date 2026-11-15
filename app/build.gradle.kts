@@ -19,8 +19,20 @@ android {
             abiFilters.add("arm64-v8a");
         }
     }
+    signingConfigs {
+        // A checked-in throwaway key: GitHub runners generate a fresh debug keystore per job, so
+        // every CI build used to get a different signature and installs silently failed to replace
+        // the previous version.
+        create("ci") {
+            storeFile = rootProject.file("keystore/tgsp.jks")
+            storePassword = "tgspdebug"
+            keyAlias = "tgsp"
+            keyPassword = "tgspdebug"
+        }
+    }
     buildTypes {
         debug {
+            signingConfig = signingConfigs.getByName("ci")
             // LSPosed loads every dex of the module into the client process at injection. Keep the
             // payload as small as possible: the app under test is sensitive to the extra class
             // linker work during its own startup.
@@ -29,6 +41,7 @@ android {
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
         release {
+            signingConfig = signingConfigs.getByName("ci")
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
